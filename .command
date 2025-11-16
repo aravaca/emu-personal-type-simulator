@@ -1,5 +1,5 @@
 git add .
-git commit -m "update ui & add description"
+git commit -m "update ui & tighten tasc relax margin"
 git push origin main
 
 pip install fastapi uvicorn[standard]

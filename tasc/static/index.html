@@ -291,7 +291,7 @@ body{overflow-x:hidden;overflow-y:auto}
   gap: 6px;
   font-family: 'Orbitron', sans-serif;
   z-index: 1001;
-  top: 80px !important; 
+  top: 60px !important; 
 }
 @media (max-width: 768px) {.tasc-toggle {top: 165px;}}
 .tasc-toggle .tasc-label{font-size:12px;font-weight:600;color:#9fc5ff;user-select:none}
@@ -321,7 +321,13 @@ body{overflow-x:hidden;overflow-y:auto}
 .line .value {
   text-align: right;
   padding-right: 40px;  /* 👈 오른쪽에 여백 주기 (라더캔버스+간격) */
-  min-width: 100px;     /* 👈 숫자 칸 최소 너비 잡아주면 더 안정적 */
+  min-width: 110px;     /* 👈 숫자 칸 최소 너비 잡아주면 더 안정적 */
+  max-width: 240px;
+  /* Use fixed-width digits so numbers don't shift when digits change */
+  font-variant-numeric: tabular-nums;
+  -moz-font-feature-settings: "tnum" 1;
+  -webkit-font-feature-settings: "tnum" 1;
+  font-feature-settings: "tnum";
 }
 .line .unit {
   margin-left: 4px;
@@ -441,6 +447,113 @@ body{overflow-x:hidden;overflow-y:auto}
 }
 
 </style>
+
+  <!-- Modern UI overrides: Inter font + refined glassmorphism -->
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;600;700;800&display=swap" rel="stylesheet">
+  <style id="modernize-ui">
+  :root{
+    --bg-0: #071022;
+    --bg-1: linear-gradient(180deg,#071022 0%, #061826 60%);
+    --card: rgba(255,255,255,0.04);
+    --card-border: rgba(255,255,255,0.06);
+    --glass-blur: 8px;
+    --accent: #36c5ff;
+    --accent-2: #6b8cff;
+    --muted: #9fb6d6;
+  }
+  html,body{height:100%;}
+  body{
+    font-family: 'Inter', system-ui, -apple-system, 'Segoe UI', Roboto, 'Noto Sans KR', sans-serif;
+    margin:0;padding:0;
+    color:#e8f2ff;background:var(--bg-1);-webkit-font-smoothing:antialiased; -moz-osx-font-smoothing:grayscale;
+  }
+
+  /* Global card refresh */
+  .card{
+    background: var(--card) !important;
+    border: 1px solid var(--card-border) !important;
+    border-radius:14px !important;
+    padding:14px !important;
+    box-shadow: 0 10px 30px rgba(4,10,20,0.6) !important;
+    backdrop-filter: blur(var(--glass-blur)) saturate(1.05) !important;
+  }
+
+  /* Header / overlay */
+  #overlay .card{max-width:980px;padding:20px 20px 18px;border-radius:16px}
+  .title{font-size:1.3rem;color:var(--accent);display:flex;align-items:center;gap:10px}
+  .subtitle{color:var(--muted);margin-bottom:14px}
+
+  /* Buttons */
+  .btn-primary, button{background:linear-gradient(90deg,var(--accent),var(--accent-2)) !important;color:#fff !important;border:none;border-radius:12px;padding:10px 14px;font-weight:600;cursor:pointer}
+  .btn-primary:hover, button:hover{transform:translateY(-2px);box-shadow:0 8px 24px rgba(18,38,76,0.45)}
+
+  /* Inputs */
+  .form-input{background:rgba(255,255,255,0.03) !important;border:1px solid rgba(255,255,255,0.04) !important;padding:10px !important;border-radius:10px !important;color:inherit}
+  .form-label{color:var(--muted) !important}
+
+  /* Preview card */
+  .overlay-preview{background:linear-gradient(180deg, rgba(255,255,255,0.02), rgba(255,255,255,0.01)) !important;border-radius:12px}
+  .preview-image-frame{border-radius:10px;overflow:hidden;border:1px solid rgba(255,255,255,0.04)}
+  .preview-title{font-weight:700;color:#fff}
+  .preview-line{color:var(--muted)}
+
+  /* HUD cards: larger numbers, clearer spacing */
+  .stat{font-size:28px;font-weight:700;color:#ffffff}
+  .line{display:flex;justify-content:space-between;align-items:center;margin:8px 0}
+
+  /* Ensure HUD numbers use tabular (fixed-width) digits for stable layout */
+  .stat, #rem, #spd, #timer { font-variant-numeric: tabular-nums; font-feature-settings: "tnum"; -moz-font-feature-settings: "tnum" 1; -webkit-font-feature-settings: "tnum" 1; }
+
+  /* Keyboard look */
+  .kbd{background:rgba(255,255,255,0.03);border:1px solid rgba(255,255,255,0.06);padding:6px 8px;border-radius:8px;font-weight:600}
+
+  /* Floating action button moved to bottom-right */
+  .fab{left:auto;right:20px;bottom:20px;transform:none;border-radius:999px;padding:14px 16px}
+
+  /* Make the overlay visually lighter and centered */
+  #overlay{align-items:center;justify-content:center;padding:20px}
+
+  /* Responsive tweaks */
+  @media (max-width:840px){
+    .overlay-grid{grid-template-columns:1fr !important}
+    #wrap{padding:12px}
+    .card{padding:12px}
+  }
+
+  /* Small helper accents */
+  .badge-chip{background:rgba(255,255,255,0.02);border:1px solid rgba(255,255,255,0.03);color:var(--muted);padding:6px 10px;border-radius:999px}
+
+  /* Snow weather: page background flips to white and text becomes dark */
+  body.weather-snow {
+    background: #ffffff !important;
+    color: #06202a !important;
+  }
+
+  .weather-snow .card{
+    background: rgba(255,255,255,0.96) !important;
+    border-color: rgba(10,20,30,0.06) !important;
+    box-shadow: 0 10px 30px rgba(12,18,28,0.06) !important;
+    color: #08202a !important;
+  }
+
+  /* Use a subtle, refined shadow for dark-on-light text (less neon, more natural) */
+  .weather-snow .title,
+  .weather-snow .preview-title,
+  .weather-snow .stat:not(#notch),
+  .weather-snow .preview-line,
+  .weather-snow .form-label,
+  .weather-snow .kbd,
+  .weather-snow .badge-chip{
+    color: #06202a !important;
+    text-shadow: 0 2px 6px rgba(6,16,20,0.08) !important;
+  }
+
+  .weather-snow .kbd{ background: rgba(0,0,0,0.04) !important; border-color: rgba(0,0,0,0.06) !important; }
+  .weather-snow .badge-chip{ background: rgba(2,20,30,0.03) !important; border-color: rgba(2,20,30,0.06) !important; }
+  .weather-snow .overlay-preview{ background: linear-gradient(180deg, rgba(255,255,255,0.98), rgba(250,250,252,0.95)) !important; }
+
+
+  </style>
 </head>
 <body>
 <canvas id="ribbonBig" style="position:fixed; right:0; top:0; bottom:0; width:27px; height:100vh; pointer-events:none; z-index:10002; display:flex; align-items:right; justify-content:center;"></canvas>
@@ -506,7 +619,7 @@ body{overflow-x:hidden;overflow-y:auto}
 .toggle-bar{
   position:absolute;
   right: 110px;
-  top:80px !important; /* 기존 TASC 위치 그대로 */
+  top:60px !important; /* 기존 TASC 위치 그대로 */
   display:flex;
   align-items:center;
   font-size:12px;font-weight:600;color:#9fc5ff;user-select:none;
@@ -622,6 +735,7 @@ body{overflow-x:hidden;overflow-y:auto}
   <span id="labelRemainDist">정차</span>
   <span class="stat value" id="rem">—</span>
 </div>
+
 <div class="line">
   <span id="labelGrade">구배</span>
   <span class="stat value"><span id="grade_percent">—</span><span class="unit"> ‰</span></span>
@@ -636,7 +750,7 @@ body{overflow-x:hidden;overflow-y:auto}
     <span class="kbd">W</span> <span id="labelUp">제동 체결</span> ·
     <span class="kbd">S</span> <span id="labelDown">제동 완해</span> ·
     <span class="kbd">A</span> <span id="labelRestart">6단 제동</span> ·
-    <span class="kbd">B</span> <span id="labelRestart">제동곡선 표시</span>
+    <span class="kbd">B</span> <span id="labelRestart">제동곡선</span>
     <!-- <span id="labelRelease">해방</span> <span class="kbd">N</span> -->
   </div>
 
@@ -738,7 +852,7 @@ body{overflow-x:hidden;overflow-y:auto}
           <span class="kbd">W</span> 제동 체결 · 
           <span class="kbd">S</span> 제동 완해 · 
           <span class="kbd">N</span> 중립 기어 · 
-          <span class="kbd">A</span> 6단 상용제동 · 
+          <span class="kbd">A</span> 6단(5단) 상용제동 · 
           <span class="kbd">B</span> 제동곡선 표시
         </div>
 
@@ -2056,10 +2170,40 @@ inputLoadRate.addEventListener('input', () => {
 /* ===== 날씨 UI ===== */
 function muFromWeather(w){return w==="비옴"?0.6:(w==="눈옴"?0.3:1.0)}
 function updateWeatherUI(){
-  const w=weatherSelect.value, ov=document.getElementById("overlay");
-  if(w==="눈옴"){snowflakes.style.display="block";raindrops.style.display="none";document.documentElement.style.background="#fff";document.body.style.background="#fff";ov.style.background="rgba(255,255,255,.15)";canvas.style.background="#fff";}
-  else if(w==="비옴"){snowflakes.style.display="none";raindrops.style.display="block";document.documentElement.style.background="#4b5d67";document.body.style.background="#4b5d67";ov.style.background="rgba(40,60,80,.35)";canvas.style.background="#4b5d67";}
-  else{snowflakes.style.display="none";raindrops.style.display="none";const g="radial-gradient(circle at 50% 20%, #0b0f14, #05070a)";document.documentElement.style.background=g;document.body.style.background=g;ov.style.background="rgba(0,0,0,.6)";canvas.style.background="linear-gradient(#0b0f14,#0a1019)";}
+  const w = weatherSelect.value, ov = document.getElementById("overlay");
+  // Keep page-level background styling controlled by CSS by default.
+  if (w === "눈옴") {
+    // show snowflakes but keep overlay/canvas dark for readable text
+    snowflakes.style.display = "block";
+    raindrops.style.display = "none";
+    // clear any inline global background overrides
+    document.documentElement.style.background = '';
+    document.body.style.background = '';
+    // add snow theme class so CSS can switch card/text colors to dark-on-light
+    try { document.body.classList.add('weather-snow'); } catch(e){}
+    // switch overlay to a light panel (page background is white in snow mode)
+    ov.style.background = "rgba(255,255,255,0.92)";
+    try { ov.style.backdropFilter = 'blur(6px)'; } catch(e){}
+    canvas.style.background = "linear-gradient(#0b0f14,#0a1019)";
+  } else if (w === "비옴") {
+    snowflakes.style.display = "none";
+    raindrops.style.display = "block";
+    // remove snow theme if previously applied
+    try { document.body.classList.remove('weather-snow'); } catch(e){}
+    document.documentElement.style.background = "#4b5d67";
+    document.body.style.background = "#4b5d67";
+    ov.style.background = "rgba(40,60,80,.35)";
+    canvas.style.background = "#4b5d67";
+  } else {
+    snowflakes.style.display = "none";
+    raindrops.style.display = "none";
+    try { document.body.classList.remove('weather-snow'); } catch(e){}
+    const g = "radial-gradient(circle at 50% 20%, #0b0f14, #05070a)";
+    document.documentElement.style.background = g;
+    document.body.style.background = g;
+    ov.style.background = "rgba(0,0,0,.6)";
+    canvas.style.background = "linear-gradient(#0b0f14,#0a1019)";
+  }
 }
 weatherSelect.addEventListener("change",()=>{updateWeatherUI();const mu=muFromWeather(weatherSelect.value); if(ws.readyState===WebSocket.OPEN){ws.send(JSON.stringify({type:"cmd",payload:{name:"setMu",value:mu}}));}});
 updateWeatherUI();
