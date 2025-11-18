@@ -2399,15 +2399,14 @@ signDistances.forEach(d => {
 function syncCameraFromState() {
   const rem = Number(window.st?.remaining_m ?? 0);
   
-  // train_name에 'n700s'가 포함되어 있으면 높이를 3.1로
-  const trainName = window.st?.train_name ?? '';
-  const lowerName = trainName.toLowerCase();
+const trainName = window.st?.train_name ?? '';
+const lowerName = trainName.toLowerCase();
 
-const y = (
-  lowerName.includes('n700s') ||
-  lowerName.includes('e26')   ||
-  lowerName.includes('ktx')
-) ? 3.0 : 2.7;
+const y = lowerName.includes('ktx')
+  ? 3.4
+  : (lowerName.includes('n700s') || lowerName.includes('e26'))
+    ? 3.0
+    : 2.7; //the rest
 
   
 const z = 200 - rem;
@@ -3851,8 +3850,14 @@ function loadVehicleFile(filePath){
         }, 10);
 
         const desiredPlatLen =
-          /n700s_3000/i.test(filePath) || /e26/i.test(filePath) ? 405 : 210;
+        /n700s_3000/i.test(filePath) ||
+        /e26/i.test(filePath) ||
+        /ktx1/i.test(filePath)
+          ? 405
+          : 205;
+
         if (window.__updatePlatformLength) window.__updatePlatformLength(desiredPlatLen);
+
       }
     })
     .catch(console.error);
