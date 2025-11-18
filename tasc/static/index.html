@@ -2401,7 +2401,14 @@ function syncCameraFromState() {
   
   // train_name에 'n700s'가 포함되어 있으면 높이를 3.1로
   const trainName = window.st?.train_name ?? '';
-  const y = trainName.toLowerCase().includes('n700s') || trainName.toLowerCase().includes('e26') ? 3.0 : 2.7; // 대소문자 무시
+  const lowerName = trainName.toLowerCase();
+
+const y = (
+  lowerName.includes('n700s') ||
+  lowerName.includes('e26')   ||
+  lowerName.includes('ktx')
+) ? 3.0 : 2.7;
+
   
 const z = 200 - rem;
 
