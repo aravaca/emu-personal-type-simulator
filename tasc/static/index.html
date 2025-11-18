@@ -1497,13 +1497,13 @@ const scene = new THREE.Scene();
   headlight.castShadow = false;
 
   // 카메라 기준 앞쪽으로 향하게
-  headlight.position.set(0, 0, 0);
   headlight.target.position.set(0, -0.05, -1.0);
-
+  
   const headlightTarget = new THREE.Object3D();
   headlightTarget.position.set(0, -0.1, -1.0);
   camera.add(headlight);
-  camera.add(headlight.target);
+  camera.add(headlightTarget);
+  headlight.position.set(0, 0, 0);
   headlight.target = headlightTarget;
   scene.add(camera); // 카메라도 씬에 넣어줘야 자식 라이트가 적용됨
 
