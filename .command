@@ -1,5 +1,5 @@
 git add .
-git commit -m "add mini panel"
+git commit -m "update dist limit"
 git push origin main
 
 pip install fastapi uvicorn[standard]

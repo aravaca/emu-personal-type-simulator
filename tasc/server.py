@@ -43,6 +43,10 @@ class Vehicle:
     forward_notch_accels: list = None  # [-1.5, -1.1] 등
 
 
+    # --- 새로 추가 ---
+    T_max_kN: float = 0.0 # 최대 견인력(kN) ex) KTX-1: 382
+    P_max_kW: float = 0.0 # 정격/최대 출력(kW) ex) KTX-1: 13200
+
     # Davis 계수 (열차 전체) : F = A0 + B1 * v + C2 * v^2 [N], v[m/s]
     A0: float = 1200.0
     B1: float = 30.0
@@ -98,6 +102,10 @@ class Vehicle:
             tau_brk=data.get("tau_brk_ms", 250) / 1000.0,
             mass_t=mass_t,
             mass_kg=mass_t * 1000,
+
+            # 새 필드
+            T_max_kN=data.get("T_max_kN", 0.0),
+            P_max_kW=data.get("P_max_kW", 0.0),
 
             # 초기값(로드 시점 값; 재계산으로 덮어씀)
             A0=data.get("davis_A0", 1200.0),
@@ -702,9 +710,58 @@ class StoppingSim:
 
 
     def compute_power_accel(self, lever_notch: int, v: float) -> float:
+        """
+        동력 가속도 계산:
+        - 음수 notch(P1~Pn)만 동력, 0 이상은 0
+        - Vehicle에 T_max_kN, P_max_kW가 설정되어 있으면
+          '출력 제한 + 견인력 제한' 모델 사용
+        - 없으면 예전 방식(노치별 고정 a + 속도 fade)으로 fallback
+        """
+        # 전진 노치가 아니면(=제동 또는 N) 가속 없음
         if lever_notch >= 0 or v <= 0.0:
             return 0.0
 
+        # ------------------------
+        # 1) 물리 기반 모델이 가능한 경우
+        # ------------------------
+        if self.veh.T_max_kN > 0.0 and self.veh.P_max_kW > 0.0:
+            # notch 인덱스 (P1= -1, P2= -2 ...)
+            n_forward = len(self.veh.forward_notch_accels) or self.veh.forward_notches
+            n_forward = max(1, n_forward) # 0 나누기 방지
+            idx = -lever_notch - 1
+            idx = max(0, min(idx, n_forward - 1))
+
+            # 노치별 출력 비율 (1/N, 2/N, ..., N/N)
+            notch_ratio = (idx + 1) / n_forward
+
+            # 단위 변환
+            P_max_W = self.veh.P_max_kW * 1000.0 # kW → W
+            T_max_N = self.veh.T_max_kN * 1000.0 # kN → N
+
+            # 속도 v[m/s]에서 풀 파워 견인력 F_full
+            v_safe = max(0.1, v)
+            v_cross = P_max_W / T_max_N # 출력제한 전환속도
+
+            if v_safe < v_cross:
+                F_full = T_max_N # 저속: 견인력 제한
+            else:
+                F_full = P_max_W / v_safe # 고속: 출력 제한
+
+            # 현재 노치에 해당하는 실제 견인력
+            F_trac = notch_ratio * F_full
+
+            # 순수 "동력" 가속도 (저항/구배는 step()에서 따로 빠짐)
+            a_pwr = F_trac / self.veh.mass_kg # [m/s²]
+
+            # a_max가 정의돼 있으면 상한으로 사용 (안전장치)
+            if self.veh.a_max > 0:
+                a_pwr = min(a_pwr, self.veh.a_max)
+
+            return a_pwr
+
+        # ------------------------
+        # 2) 물리 파라미터 없으면 기존 방식 유지
+        # ------------------------
         n_notches = len(self.veh.forward_notch_accels)
         idx = max(0, min(-lever_notch - 1, n_notches - 1))
         base_accel = self.veh.forward_notch_accels[idx]
@@ -716,15 +773,14 @@ class StoppingSim:
             v_cap = (v_max_total * (idx + 1) / n_notches)
 
         fade_start = 0.1 * v_cap
-        #0.85 0.20
-        min_factor = 0.05  # 캡 근처에서도 5%는 남음
+        min_factor = 0.05
 
         if v <= fade_start:
             factor = 1.0
         else:
             x = (v - fade_start) / (v_cap - fade_start)
             factor = 1.0 - (1.0 - min_factor) * x
-            factor = max(factor, min_factor)  # clamp 하한값
+            factor = max(factor, min_factor)
 
         return base_accel * factor
 
@@ -1346,7 +1402,7 @@ async def ws_endpoint(ws: WebSocket):
                         v_kmh_raw = float(speed)
                         L_raw = float(dist)
                         v_kmh = max(40.0,  min(300.0, v_kmh_raw))
-                        L_m   = max(150.0, min(900.0,  L_raw))
+                        L_m   = max(150.0, min(6000.0,  L_raw))
 
                         sim.scn.v0 = v_kmh / 3.6
                         sim.scn.L = L_m
