@@ -1,5 +1,5 @@
 git add .
-git commit -m "fix accel bug"
+git commit -m "add instrument panel"
 git push origin main
 
 pip install fastapi uvicorn[standard]

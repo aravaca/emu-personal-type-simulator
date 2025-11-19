@@ -1544,14 +1544,74 @@ dash.innerHTML = `
 
 
 // --- inst.png를 SVG viewBox로 감싸기: PNG 원본 사이즈를 반드시 맞춰주세요 ---
-const INST_SRC = '/static/photos/inst.png';
-const INST_SIZE = { width: 7560, height: 1760 }; // inst.png 원본 픽셀 크기
+let INST_SRC = '/static/photos/inst.png';
+let INST_SIZE = { width: 7560, height: 1760 };
 
-// 텍스트/라더 배치 좌표 (모두 PNG 원본 좌표 기준)
-const INST_MARKERS = {
-  speed: { x: 2195, y: 1520 }, // 속도 숫자
-  ladder: { x: 970, y: 940, width: 150, height: 630 } // mini ladder 영역
+let INST_MARKERS = {
+  speed: { x: 2195, y: 1520 },
+  ladder: { x: 970, y: 940, width: 150, height: 630 }
 };
+
+let INST_SPEED_FONT_SIZE = 150; // 기본값
+let INST_SPEED_LETTER_SPACING = "12px"; // 기본값
+
+// 열차별 계기판 레이아웃 정의
+const INSTRUMENT_LAYOUTS = {
+  default: {
+    src: '/static/photos/inst.png',
+    size: { width: 7560, height: 1760 },
+    markers: {
+      speed: { x: 2195, y: 1520 },
+      ladder: { x: 970, y: 940, width: 150, height: 630 }
+    },
+    speedFontSize: 150,
+    speedLetterSpacing: "12px"
+  },
+
+  ktx: {
+    src: '/static/photos/ktx_inst.png',
+    size: { width: 1908, height: 460 }, // ktx_inst.png 실제 해상도로 수정
+    markers: {
+      speed: { x: /* TODO: */ 883, y: 170 }, // KTX 계기판에서 속도 숫자 위치
+      ladder: { x: /* TODO: */ 1200, y: 900, width: 150, height: 630 }
+    },
+    speedFontSize: 35,
+    speedLetterSpacing: "10px"
+  },
+
+  n700s: {
+    src: '/static/photos/n700s_inst.png',
+    size: { width: 1880, height: 488 }, // n700s_inst.png 실제 해상도로 수정
+    markers: {
+      speed: { x: /* TODO: */ 901,  y: 352 },
+      ladder: { x: /* TODO: */ 1000, y: 900, width: 150, height: 630 }
+    },
+    speedFontSize: 25,
+    speedLetterSpacing: "3px"
+  }
+};
+
+
+function setInstrumentLayout(layoutKey) {
+  const cfg = INSTRUMENT_LAYOUTS[layoutKey] || INSTRUMENT_LAYOUTS.default;
+
+  INST_SRC = cfg.src;
+  INST_SIZE = cfg.size;
+  INST_MARKERS = cfg.markers;
+  INST_SPEED_FONT_SIZE = cfg.speedFontSize || 150; // 🔹 여기
+  INST_SPEED_LETTER_SPACING = cfg.speedLetterSpacing || "12px";
+  // 계기판 SVG를 다시 생성 (image + speed text + mini ladder)
+  try {
+    if (typeof mountInstrumentSVG === 'function') {
+      mountInstrumentSVG();
+    }
+  } catch (e) {
+    console.debug('setInstrumentLayout error', e);
+  }
+}
+
+// 전역으로도 쓸 수 있게
+try { window.setInstrumentLayout = setInstrumentLayout; } catch (e) {}
 
 // 네온 느낌 필터
 const SVG_FILTER_DEF = `
@@ -1568,6 +1628,9 @@ function mountInstrumentSVG() {
   const wrap = document.getElementById('cabInstWrap');
   if (!wrap) return;
 
+// --- SVG Radius 적용용 clipPath 생성 ---
+
+
   const svg = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
   svg.setAttribute('viewBox', `0 0 ${INST_SIZE.width} ${INST_SIZE.height}`);
   svg.setAttribute('width', '100%');
@@ -1577,6 +1640,22 @@ function mountInstrumentSVG() {
   // 필터 추가
   svg.insertAdjacentHTML('beforeend', SVG_FILTER_DEF);
 
+  const radius = 20; // ← 원하는 border-radius px
+
+const clip = document.createElementNS('http://www.w3.org/2000/svg', 'clipPath');
+clip.setAttribute('id', 'instRadius');
+
+const clipRect = document.createElementNS('http://www.w3.org/2000/svg', 'rect');
+clipRect.setAttribute('x', 0);
+clipRect.setAttribute('y', 0);
+clipRect.setAttribute('width', INST_SIZE.width);
+clipRect.setAttribute('height', INST_SIZE.height);
+clipRect.setAttribute('rx', radius);
+clipRect.setAttribute('ry', radius);
+
+clip.appendChild(clipRect);
+svg.appendChild(clip);
+
   // inst.png 이미지 배경
   const img = document.createElementNS('http://www.w3.org/2000/svg', 'image');
   img.setAttributeNS('http://www.w3.org/1999/xlink', 'href', INST_SRC);
@@ -1584,6 +1663,7 @@ function mountInstrumentSVG() {
   img.setAttribute('y', '0');
   img.setAttribute('width', INST_SIZE.width);
   img.setAttribute('height', INST_SIZE.height);
+  img.setAttribute('clip-path', 'url(#instRadius)');
   svg.appendChild(img);
 
   // 공통 텍스트 스타일
@@ -1591,17 +1671,18 @@ function mountInstrumentSVG() {
     fill: '#eaffff',
     'font-family': `'Orbitron', system-ui, sans-serif`,
     'font-weight': '550',
-    'letter-spacing': '12px',
-    'font-size': '150px',
+    // 'letter-spacing': '12px',
+    //'font-size': '150px',
     // filter: 'url(#glow)',
   };
 
-  const makeText = (id, x, y, size, txt, extra = {}) => {
+  const makeText = (id, x, y, size, INST_SPEED_LETTER_SPACING, txt, extra = {}) => {
     const t = document.createElementNS('http://www.w3.org/2000/svg', 'text');
     t.setAttribute('id', id);
     t.setAttribute('x', x);
     t.setAttribute('y', y);
     t.setAttribute('font-size', size);
+    t.setAttribute('letter-spacing', INST_SPEED_LETTER_SPACING);
     for (const [k, v] of Object.entries({ ...baseTextAttrs, ...extra })) {
       t.setAttribute(k, v);
     }
@@ -1610,18 +1691,17 @@ function mountInstrumentSVG() {
   };
 
   // 속도 텍스트 (오른쪽 끝 정렬)
-  svg.appendChild(
-    makeText(
-      'svgSpeed',
-      INST_MARKERS.speed.x,
-      INST_MARKERS.speed.y,
-      48,
-      '0',
-
-      { 'text-anchor': 'end', 'font-style': 'italic'}
-    )
-  );
-
+svg.appendChild(
+  makeText(
+    'svgSpeed',
+    INST_MARKERS.speed.x,
+    INST_MARKERS.speed.y,
+    INST_SPEED_FONT_SIZE, // 🔹 여기만 변경]
+    INST_SPEED_LETTER_SPACING,
+    '0',
+    { 'text-anchor': 'end', 'font-style': 'italic'}
+  )
+);
   wrap.innerHTML = '';
   wrap.appendChild(svg);
 
@@ -3811,6 +3891,25 @@ function loadVehicleFile(filePath){
         for (let i = 0; i < vehicle.notches; i++) {
           brakeDecels[i] = Math.abs(vehicle.notch_accels[vehicle.notches - 1 - i] ?? 0);
         }
+      }
+
+      
+      // 🔹 (1) 파일 이름 기준으로 계기판 타입 결정
+      const lowerPath = filePath.toLowerCase();
+      let layoutKey = 'default';
+      if (lowerPath.includes('ktx1')) {
+        layoutKey = 'ktx';
+      } else if (lowerPath.includes('n700s')) {
+        layoutKey = 'n700s';
+      }
+
+      // 🔹 (2) 레이아웃 적용 (이미지 + 속도텍스트 위치 + 라더 좌표)
+      try {
+        if (typeof setInstrumentLayout === 'function') {
+          setInstrumentLayout(layoutKey);
+        }
+      } catch (e) {
+        console.debug('apply instrument layout failed', e);
       }
 
       // 🔹 여기! 차량 notch 수에 맞춰 계기판 mini ladder 다시 생성
