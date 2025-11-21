@@ -20,8 +20,8 @@
 .mini-hud {
   position: absolute;
   top: 10px;
-  right: 50px;
-  min-width: 150px;
+  right: 10px;
+  min-width: 100px;
   padding: 8px 10px;
   border-radius: 12px;
   background:
@@ -31,10 +31,12 @@
   box-shadow: 0 12px 26px rgba(0,0,0,.75);
   backdrop-filter: blur(8px);
   font-family: 'Inter', system-ui, -apple-system, 'Segoe UI', sans-serif;
-  font-size: 11px;
+  font-size: 15px;
   color: #cfe4ff;
   pointer-events: none; /* 조작 방해 안 하도록 */
   z-index: 6;
+  text-align: right;
+  line-height: 1.6;
 }
 
 .mini-hud-header {
@@ -56,24 +58,29 @@
   box-shadow: 0 0 10px rgba(0,246,255,.9);
 }
 
-.mini-hud-rows {
+/* .mini-hud-rows {
   display: grid;
   grid-template-columns: 1fr 1fr;
   gap: 4px 10px;
 }
 
+*/
+
 .mini-row {
   display: flex;
-  flex-direction: column;
-  gap: 1px;
+  justify-content: space-between; /* 좌 label — 우 value */
+  align-items: center;
+  margin: 2px 0;
 }
 
 .mini-label {
+  text-align: left;
   font-size: 9px;
   opacity: .75;
 }
 
 .mini-value {
+  text-align: right;
   font-size: 12px;
   font-weight: 600;
   font-variant-numeric: tabular-nums;
@@ -884,8 +891,7 @@ body {
 })();
 </script>
 <div class="card" id="cabCard" style="flex:0 1 auto;" align="center">
-  <div id="cab3d" style="background:#000;overflow:hidden"></div>
-
+  <div id="cab3d" style="background:#000;overflow:hidden">
   <!-- 🔹 3D 오른쪽 위 미니 HUD -->
   <div id="miniHud" class="mini-hud">
     <div class="mini-hud-header">
@@ -921,6 +927,12 @@ body {
       </div>
     </div>
   </div>
+
+
+<!-- <div class="card" style="flex:2 1 520px"><canvas id="hud"></canvas></div> -->
+
+</div>
+
 
   <div class="hint" style="font-size:12px;color:#9fc5ff;margin-top:6px">
     <!-- 200m 지점부터 50m 간격으로 참고 표지판이 설치되어 있습니다. -->
