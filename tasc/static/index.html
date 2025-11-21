@@ -12,6 +12,27 @@
 <style>
 @import url('https://fonts.cdnfonts.com/css/a-otf-shin-go-pro');
 
+.unit {
+  font-size: 0.7em;      /* 글자 크기 줄이기 */
+  display: inline-block; /* transform 적용하려면 필요 */
+  transform: scaleX(0.7); /* 좌우로 압축 (0~1 사이로 줄이면 됨) */
+  transform-origin: right; /* 압축 기준점 (옵션) */
+  margin-left: -8px; /* ← 필요한 만큼 조절 */
+}
+
+.unit-grade {
+  font-size: 0.7em;        /* 숫자보다 작게 */
+  display: inline-block;   /* transform 적용 위해 필요 */
+  transform: scaleX(0.7);  /* 좌우 압축 */
+  transform-origin: right;  /* 왼쪽 기준으로 압축 */
+  margin-left: -2px;       /* 숫자와 간격 줄이기 (상황 보고 -1~-3px 조절) */
+}
+
+.zero {
+  font-style: italic;
+}
+
+
 /* === Mini 3D HUD (top-right) === */
 #cabCard {
   position: relative; /* mini HUD 기준점 */
@@ -936,7 +957,7 @@ body {
       </div>
 
       <div class="mini-row">
-        <span class="mini-label">Speed (km/h)</span>
+        <span class="mini-label">Speed</span>
         <span class="mini-value" id="miniSpeed">—</span>
       </div>
 
@@ -946,7 +967,7 @@ body {
       </div>
 
       <div class="mini-row grade">
-        <span class="mini-label">Grade (‰)</span>
+        <span class="mini-label">Grade</span>
         <span class="mini-value" id="miniGrade">—</span>
       </div>
 
@@ -1061,17 +1082,17 @@ body {
 </div>
 
 <!-- <div class="card" style="flex:2 1 520px"><canvas id="hud"></canvas></div> -->
-<div class="card" style="flex:1 1 240px"><div><b>피드백</b></div><div id="fb">Space로 시작. W/S로 브레이크 조절하세요.</div></div>
+<div class="card" style="flex:1 1 240px"><div><b>Feedback</b></div><div id="fb">Space로 시작. W/S로 브레이크 조절하세요.</div></div>
 </div>
 </div>
 
 <!-- 오버레이 -->
 <div id="overlay">
   <div class="card">
-    <h2 class="title">
-      <img id="trainIcon" src="/static/logos/e233_logo.png" alt="E233" class="emoji"> 
-      JR Train Simulator
-    </h2>
+<h2 class="title">
+  <img id="trainIcon" src="/static/logos/e233_logo.png" alt="E233" class="emoji">
+  JR Train Simulator – <span class="zero">Zero!!</span>
+</h2>
 
     <p class="subtitle" id="subtitleIntro">
       TASC가 활성화된 상태에서도, 운전자는 수동 조작으로 운전에 개입할 수 있습니다.
@@ -1097,7 +1118,7 @@ body {
       <!-- 좌측: 입력 폼 -->
       <div class="overlay-main">
         <!-- 3D on/off -->
-        <label class="form-label"><span>3D Graphics</span>
+        <label class="form-label" style="display: none;"><span>3D Graphics</span>
           <select id="syncMode" class="form-input">
             <option value="on" selected>Enable (PC Recommended)</option>
             <option value="off">Disable</option>
@@ -2771,11 +2792,25 @@ function randomizeInputs(){
   inputGrade.dispatchEvent(new Event('change'));
   inputLoadRate.dispatchEvent(new Event('change'));
 
-  // 힌트(선택)
-  if (fb){
-    fb.innerHTML = `<div class="ok">랜덤 시작값: v=${v} km/h, d=${d} m, g=${g.toFixed(1)}‰, 날씨=${w}, 탑승률=${load}%</div>`;
-    setTimeout(()=>{ if(!window.st || !window.st.finished) fb.textContent = "Space로 시작. W/S로 브레이크 조절하세요."; }, 5000);
-  }
+// 힌트(선택)
+if (fb) {
+  fb.innerHTML = `<div class="ok">랜덤 시작값: 날씨=${w}, 탑승률=${load}%</div>`;
+  
+  // 표시한 시간 저장
+  fb.dataset.lastUpdate = Date.now();
+  
+  setTimeout(() => {
+    const now = Date.now();
+    const last = Number(fb.dataset.lastUpdate);
+
+    // 3초가 지났는지 확인 (3000ms)
+    if (now - last >= 3000) {
+      fb.textContent = "Space로 시작. W/S로 브레이크 조절하세요.";
+      fb.dataset.lastUpdate = Date.now(); // 업데이트 시간 갱신
+    }
+  }, 5000);
+}
+
 }
 
 /* ===== 시작/재시작 ===== */
@@ -2960,9 +2995,11 @@ if (miniRemain) {
 spdEl.textContent = (st.v * 3.6).toFixed(1);
 
 // 🔹 mini HUD – 속도
-if (miniSpeed) {
-  miniSpeed.textContent = spdEl.textContent;
-}
+miniSpeed.innerHTML = `
+  ${spdEl.textContent} 
+  <span class="unit">km/h</span>
+`;
+
 
 const maxIdx = (vehicle?.notches ?? 10) - 1; // EB 인덱스
 const forwardAccels = vehicle?.forward_notch_accels ?? [0.139, 0.278, 0.417, 0.556, 0.694];
@@ -2999,9 +3036,11 @@ if (miniNotch) {
 
 grade_percentEl.textContent = (10 * st.grade_percent).toFixed(1);
 
-// 🔹 mini HUD – 구배
 if (miniGrade) {
-  miniGrade.textContent = grade_percentEl.textContent;
+  miniGrade.innerHTML = `
+    ${grade_percentEl.textContent}
+    <span class="unit-grade">‰</span>
+  `;
 }
 
 const running  = !!st.running;
@@ -3911,7 +3950,7 @@ window.__brakeGuideOn = true;
       labelDown: "완화",
       labelRelease: "해방",
       subtitleIntro: 
-  "B1/B2단으로 제동을 시작해 <b>150m</b> (지상자) 지점까지 속도를 <b>60km/h</b> 이하로 낮추세요. 그 이후에는 <b>TASC(자동정차)</b>가 활성화됩니다.",
+  "TASC 활성화 시 사용법: <b>150m</b> (P3 TASC 지상자) 지점까지 속도를 <b>60km/h</b> 이하로 낮추세요. 그 이후에는 <b>TASC(자동정차)</b>가 이루어집니다.",
 
       labelTASC: "TASC",
       labelTrain: "전동차",
@@ -3928,8 +3967,8 @@ window.__brakeGuideOn = true;
       feedback: {
         early_good: "초기 제동을 수행함 — 부드럽게 제동 진입",
         early_bad: "초기 제동을 게을리함 — 승차감 불쾌",
-        stop_good: "정차 시 B1로 정차함 — 정차 직전 승차감 양호",
-        stop_bad: "정차 시 B1로 정차하지 않음 — 승차감 불쾌",
+        stop_good: "정차 시 B1/B2로 정차함 — 정차 직전 승차감 양호",
+        stop_bad: "정차 시 B1/B2로 정차하지 않음 — 승차감 불쾌",
         step_good: "기본제동 (계단제동/완해) 수행함",
         step_bad: "기본제동 (계단제동/완해) 미흡 — 불규칙한 제동 패턴으로 인한 승차감 불쾌",
         eb_good: "영업 안전 제동범위 준수",
@@ -3938,7 +3977,6 @@ window.__brakeGuideOn = true;
         stopErr: m=>`정지 오차: ${m.toFixed(2)} m`,
          hintIdle: () => {
           const tips = [
-            "팁: B1/B2로 속도를 60 km/h 이하로 낮춘 뒤 해방(N단)하지 말고 마스콘을 그대로 유지하세요.",
             "팁: TASC 정차 표시등이 켜지면 TASC가 자동 제동을 시작했음을 의미합니다.",
             "팁: TASC 정차 표시등이 깜빡이면, TASC 개입 전에 수동 조작이 가능하다는 뜻입니다.",
             "팁: 열차가 정위치에 도달하면 TASC 정위치 표시등이 켜집니다.",
@@ -3967,7 +4005,9 @@ window.__brakeGuideOn = true;
       labelDown: "B-",
       labelRelease: "Release",
       subtitleIntro: 
-  "Apply B1/B2 braking and slow down to below 60 km/h by 150 m remaining (P3 TASC beacon). Then, TASC (autopilot) takes over brake control.",
+  // "Apply B1/B2 braking and slow down to below 60 km/h by 150 m remaining (P3 TASC beacon). Then, TASC (autopilot) takes over brake control.",
+     "TASC activation instructions: Reduce speed to <b>60 km/h</b> by the <b>150 m</b> point. After that, <b>TASC (Automatic Stopping)</b> will take over.",
+
       labelTASC: "TASC",
       labelTrain: "Train",
       labelSeries: "Series",
@@ -3983,8 +4023,8 @@ window.__brakeGuideOn = true;
       feedback: {
   early_good: "You braked early — smooth initial deceleration",
   early_bad: "You braked late — the ride felt rough",
-  stop_good: "Stopped at B1 — smooth ride just before stopping",
-  stop_bad: "Failed to stop at B1 — the ride felt rough",
+  stop_good: "Stopped with B1/B2 — smooth stop",
+  stop_bad: "Failed to stop with B1/B2 — the ride felt rough",
   step_good: "Stepwise braking was applied correctly",
   step_bad: "Stepwise braking was poor, causing jolts and discomfort for passengers",
   eb_good: "Safe braking range observed — no EB applied",
@@ -3993,13 +4033,12 @@ window.__brakeGuideOn = true;
   stopErr: m => `Stopping error: ${m.toFixed(2)} m`,
   hintIdle: () => {
     const tips = [
-      "Tip: Reduce speed below 60 km/h with B1/B2 and keep the master controller in place (do not release with N).",
       "Tip: If the TASC stop indicator lights up, it means TASC has started automatic braking.",
       "Tip: If the TASC stop indicator flashes, you can manually intervene before TASC takes over.",
       "Tip: When the train reaches the exact stop position, the TASC stop-position indicator will light up.",
       "Tip: Press A for the recommended maximum service brake, D for B1 brake, and E for emergency brake.",
       "Tip: Press Q for maximum acceleration.",
-      "Tip: Check the remaining distance and stop gently with B1 to ensure a smooth ride.",
+      "Tip: Check the remaining distance and stop gently with B1/B2 to ensure a smooth ride.",
       "Tip: Reapplying and releasing the master controller just before stopping can severely affect ride comfort.",
       "Tip: Never consider re-acceleration while bringing the train to a stop."
 
@@ -4087,7 +4126,7 @@ window.__brakeGuideOn = true;
   setInterval(()=>{
     current = (current==="ko") ? "en" : "ko";
     setLang(current);
-  }, 10000);
+  }, 6000);
 })();
 
 </script>

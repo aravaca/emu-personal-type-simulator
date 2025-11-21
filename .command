@@ -1,5 +1,5 @@
 git add .
-git commit -m "change mini hud location"
+git commit -m "UPDATE UI & FEEDBACK"
 git push origin main
 
 pip install fastapi uvicorn[standard]
