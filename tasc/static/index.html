@@ -2412,10 +2412,10 @@ const trainName = window.st?.train_name ?? '';
 const lowerName = trainName.toLowerCase();
 
 const y = (lowerName.includes('ktx') || lowerName.includes('999'))
-  ? 3.1
-  : (lowerName.includes('n700s') || lowerName.includes('e26'))
-    ? 3.0
-    : 2.7; //the rest
+  ? 3.0
+  : lowerName.includes('e26')
+    ? 3.5
+    : 2.8; //the rest, including n700s
 
   
 const z = 200 - rem;
