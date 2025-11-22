@@ -1669,6 +1669,9 @@ const scene = new THREE.Scene();
   let daySkyTex, nightSkyTex;
 
   const platformLights = [];
+  const platformPillars = []; // 👈 새로 추가
+  let platformRoof = null; // 👈 지붕 Mesh 저장용
+
 
   function createSkyTexture(isDay) {
     const cw = 1024, ch = 512;
@@ -2171,7 +2174,7 @@ function createTrackCanvasTexture() {
 // }
 
   // --- 플랫폼 (정차벽 기준 -platformLen ~ 0m, 오른쪽에 배치) ---
-const platformLen = 210; // 플랫폼 길이
+let platformLen = 210; // 플랫폼 길이
 const platH = 1; // 플랫폼 높이 (1.13m로 설정)
 const platW = 3.0; // 플랫폼 폭
 const platZ = 0 + 200; // 세계좌표 보정 (ground/rail과 일치)
@@ -2226,65 +2229,102 @@ window.__updatePlatformLength = function(newLen) {
     platLineR.geometry = new THREE.BoxGeometry(0.2, 0.01, newLen);
     platLineR.position.set(-2.0915, platH + 0.01, platZ - newLen / 2);
 
-    // spawnPeopleOnPlatform(50);
+      // 🔥 1) 현재 플랫폼 길이 상태 갱신
+    platformLen = newLen;
+
+    // 🔥 2) 사람 다시 뿌리기 (길이에 비례해서 인원 수 조절)
+    if (window.spawnPeopleOnPlatform) {
+      const baseCount = 30; // 210m일 때 30명
+      const factor = newLen / 210; // 길이 비례
+      window.spawnPeopleOnPlatform(Math.round(baseCount * factor));
+    }
+
+    // 🔥 3) 기둥 + 지붕 + 램프도 새 길이에 맞게 리빌드
+    if (window.__rebuildPlatformRoof) {
+      window.__rebuildPlatformRoof(newLen);
+    }
 
   } catch(e) { /* non-fatal */ }
 };
   // --- 플랫폼 기둥 및 지붕 추가 (간단한 구조로 분위기 향상) ---
-    (function addPlatformRoof(){
-    const pillarMat = new THREE.MeshStandardMaterial({ color: 0xdddddd, metalness:0.2, roughness:0.6 });
-    const roofMat = new THREE.MeshStandardMaterial({ color: 0xf1f3f6, metalness:0.05, roughness:0.8 });
-    const pillarGeo = new THREE.BoxGeometry(0.3, 3.5, 0.3);
-    const roofGeo = new THREE.BoxGeometry(platW*1.5 , 0.12, platformLen + 6);
+(function initPlatformRoof(){
 
-    const startZ = platZ - 2;
-    const endZ = platZ - platformLen + 2;
-    const spacing = 20.0; // m 사이 간격
-    let pillarIndex = 0;
-    for (let z = startZ; z > endZ; z -= spacing){
-      pillarIndex++;
-      if (pillarIndex % 2 !== 0) continue;
-      // 왼쪽 기둥
-      // const pL = new THREE.Mesh(pillarGeo, pillarMat);
-      // pL.position.set(2.7+4, 2.5, z);
+  // 재질/기하 한 번만 만들어서 재사용
+  const pillarMat = new THREE.MeshStandardMaterial({
+    color: 0xdddddd,
+    metalness: 0.2,
+    roughness: 0.6
+  });
+  const roofMat = new THREE.MeshStandardMaterial({
+    color: 0xf1f3f6,
+    metalness: 0.05,
+    roughness: 0.8
+  });
+  const pillarGeo = new THREE.BoxGeometry(0.3, 3.5, 0.3);
 
-      // pL.castShadow = false; pL.receiveShadow = false;
-      // scene.add(pL);
-      // 오른쪽 기둥
-      const pR = new THREE.Mesh(pillarGeo, pillarMat);
-      pR.position.set(-2.7, 2.5, z);
-      pR.castShadow = false; pR.receiveShadow = false;
-      scene.add(pR);
+  function buildPlatformRoofAndLights(len) {
+    // 1) 이전 기둥 제거
+    platformPillars.forEach(p => {
+      scene.remove(p);
+      if (p.geometry) p.geometry.dispose();
+    });
+    platformPillars.length = 0;
 
-      
-      // 💡 지붕 아래 플랫폼 조명 (좌/우 한 쌍)
-      const lampHeight = platH + 2.7; // 지붕 바로 아래 정도 높이
-      const lampRange = 22; // 빛이 닿는 거리
+    // 2) 이전 램프 제거
+    platformLights.forEach(l => scene.remove(l));
+    platformLights.length = 0;
 
-      const lampColor = 0xfff1c4; // 따뜻한 전구색
-
-      // 오른쪽 플랫폼(플랫폼 y가 높은 쪽)
-      // const lampR = new THREE.PointLight(lampColor, 0, lampRange, 2.0);
-      // lampR.position.set(2.2 + 4, lampHeight, z);
-      // lampR.castShadow = false;
-      // scene.add(lampR);
-      // platformLights.push(lampR);
-
-      // 왼쪽 플랫폼
-        const lampL = new THREE.PointLight(lampColor, 0, lampRange, 2.0);
-        lampL.position.set(-2.2, lampHeight, z);
-        lampL.castShadow = false;
-        scene.add(lampL);
-        platformLights.push(lampL);
+    // 3) 이전 지붕 제거
+    if (platformRoof) {
+      scene.remove(platformRoof);
+      if (platformRoof.geometry) platformRoof.geometry.dispose();
+      platformRoof = null;
     }
 
-    // long roof spanning the platform
-    const roof = new THREE.Mesh(roofGeo, roofMat);
-    roof.position.set(-2.25, platH + 3.0, platZ - platformLen/2);
-    roof.rotation.z = THREE.MathUtils.degToRad(5);   // 5도 기울이기
-    roof.castShadow = false; roof.receiveShadow = false;
-    scene.add(roof);
+    // 새 시작/끝 z는 플랫폼 길이(len)에 맞춰
+    const startZ = platZ - 2;
+    const endZ = platZ - len + 2;
+    const spacing = 20.0;
+    let pillarIndex = 0;
 
+    for (let z = startZ; z > endZ; z -= spacing) {
+      pillarIndex++;
+      if (pillarIndex % 2 !== 0) continue;
+
+      // 오른쪽 플랫폼 기둥 (지금 사용 중인 쪽)
+      const pR = new THREE.Mesh(pillarGeo, pillarMat);
+      pR.position.set(-2.7, 2.5, z);
+      pR.castShadow = false;
+      pR.receiveShadow = false;
+      scene.add(pR);
+      platformPillars.push(pR);
+
+      // 💡 지붕 아래 플랫폼 조명
+      const lampHeight = platH + 2.7;
+      const lampRange = 22;
+      const lampColor = 0xfff1c4;
+
+      const lampL = new THREE.PointLight(lampColor, 0, lampRange, 2.0);
+      lampL.position.set(-2.2, lampHeight, z);
+      lampL.castShadow = false;
+      scene.add(lampL);
+      platformLights.push(lampL);
+    }
+
+    // 지붕도 len 기준으로 다시 생성
+    const roofGeo = new THREE.BoxGeometry(platW * 1.5, 0.12, len + 6);
+    platformRoof = new THREE.Mesh(roofGeo, roofMat);
+    platformRoof.position.set(-2.25, platH + 3.0, platZ - len / 2);
+    platformRoof.rotation.z = THREE.MathUtils.degToRad(5);
+    platformRoof.castShadow = false;
+    platformRoof.receiveShadow = false;
+    scene.add(platformRoof);
+  }
+  // 초기 한 번: 현재 platformLen 기준으로 생성
+  buildPlatformRoofAndLights(platformLen);
+
+  // 나중에 길이 바꿀 때 쓰려고 export
+  window.__rebuildPlatformRoof = buildPlatformRoofAndLights;
     // const roofL = new THREE.Mesh(roofGeo, roofMat);
     // roofL.position.set(6.25, platH + 3.0, platZ - platformLen/2);
     // roofL.rotation.z = THREE.MathUtils.degToRad(-5);   // 5도 기울이기
@@ -2304,8 +2344,8 @@ function spawnPeopleOnPlatform(count) {
 
   for (let i = 0; i < count; i++) {
 
-      const mat = personMaterials[Math.floor(Math.random() * personMaterials.length)];
-const mesh = new THREE.Mesh(personGeo, mat);
+    const mat = personMaterials[Math.floor(Math.random() * personMaterials.length)];
+    const mesh = new THREE.Mesh(personGeo, mat);
 
     // z: 플랫폼 전체 길이 안에서 랜덤
     const z = platZ - (Math.random() * (platformLen - 10));
@@ -2313,11 +2353,10 @@ const mesh = new THREE.Mesh(personGeo, mat);
     // x: 노란 선에서 조금 뒤쪽
     // 오른쪽 플랫폼 기준 (지금 열차가 오른쪽에 붙어있으니까)
     const min = -3.5;
-const max = -2.5;
+    const max = -2.5;
 
-// Math.random() → 0 이상 1 미만
-const x = Math.random() * (max - min) + min; // 필요하면 살짝 조정
-
+    // Math.random() → 0 이상 1 미만
+    const x = Math.random() * (max - min) + min; // 필요하면 살짝 조정
     const y = platH + personHeight / 2; // 발은 플랫폼 위에 닿게
 
     mesh.position.set(x, y, z);
@@ -2329,8 +2368,13 @@ const x = Math.random() * (max - min) + min; // 필요하면 살짝 조정
   }
 }
 
+// 전역에서 다시 호출할 수 있게 export
+window.spawnPeopleOnPlatform = spawnPeopleOnPlatform;
+
 // 처음 한 번 사람 15명 정도
 spawnPeopleOnPlatform(30);
+
+
   })();
 
 
