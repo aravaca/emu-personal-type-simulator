@@ -4,6 +4,7 @@
 [Try PTS!⛅️ → Play full screen on PC](https://jrtasc.kro.kr/) 
 ---
 <img width="1456" height="763" alt="a" src="https://github.com/user-attachments/assets/5e59b9bd-435f-40ae-966d-7077c6e64e5a" />
+<img width="1472" height="769" alt="b" src="https://github.com/user-attachments/assets/2afecde8-b4c3-490b-8e6d-5736c79b5865" />
 <img width="980" height="265" alt="feedback" src="https://github.com/user-attachments/assets/b523694b-a208-4161-b031-6abb18f66f38" />
 
 A lightweight **web-based railway simulation framework** replicating key control functions of **JR East/West EMUs**.  
@@ -72,6 +73,7 @@ Copyright © 2025 Hyungsuk Choi, University of Maryland
 Permission is hereby granted to use and modify this software for personal or internal purposes only.  
 Redistribution, reproduction, resale, public posting, or sharing of this software or any modified versions  
 is strictly prohibited without the express written permission of the author.
+
 
 
 
