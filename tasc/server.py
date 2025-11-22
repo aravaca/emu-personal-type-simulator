@@ -1219,7 +1219,20 @@ class StoppingSim:
                 print(f"Avg jerk: {avg_jerk:.4f}, jerk_score: {jerk_score:.2f}, final score: {score}")
                 print(f"Simulation finished: stop_error={st.stop_error_m:.3f} m, score={score}")
 
+    def remove_negative_values(self, notches: List[int]) -> List[int]:
+        """마지막 음수 값 뒤에 있는 모든 수 반환, 음수가 없으면 원본 리스트 반환"""
+        # 역순으로 탐색해서 마지막 음수 값을 찾음
+        for i in range(len(notches) - 1, -1, -1):
+            if notches[i] < 0:
+                # 마지막 음수 이후의 모든 값들 반환
+                return notches[i+1:]
+        # 음수가 없으면 원본 리스트 반환
+        return notches
+
+    
     def is_stair_pattern(self, notches: List[int]) -> bool:
+        notches = self.remove_negative_values(notches)
+
         if len(notches) < 3:
             return False
 
@@ -1241,7 +1254,7 @@ class StoppingSim:
             prev = cur
 
         # 마지막은 1로 끝나야 함
-        if notches[-1] != 1:
+        if notches[-1] not in [1, 2]:
             return False
 
         return True

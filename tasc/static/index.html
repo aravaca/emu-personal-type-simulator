@@ -4442,7 +4442,7 @@ window.__brakeGuideOn = true;
         step_good: "기본제동 (계단제동/완해) 수행함",
         step_bad: "기본제동 (계단제동/완해) 미흡 — 불규칙한 제동 패턴으로 인한 승차감 불쾌",
         eb_good: "영업 안전 제동범위 준수",
-        eb_bad: "비상제동(EB) 체결 — 급감속 충격",
+        eb_bad: "불필요한 비상제동(EB) 체결 — 급감속 충격",
         score: n=>`최종 점수: ${n}점`,
         stopErr: m=>`정지 오차: ${m.toFixed(2)} m`,
          hintIdle: () => {
@@ -4499,7 +4499,7 @@ window.__brakeGuideOn = true;
   step_good: "Stepwise braking was applied correctly",
   step_bad: "Stepwise braking was poor, causing jolts and discomfort for passengers",
   eb_good: "Safe braking range observed — no EB applied",
-  eb_bad: "EB applied, causing a harsh jolt",
+  eb_bad: "Unnecessary EB applied, causing a harsh jolt",
   score: n => `Final score: ${n}`,
   stopErr: m => `Stopping error: ${m.toFixed(2)} m`,
   hintIdle: () => {
@@ -4608,13 +4608,13 @@ window.__brakeGuideOn = true;
 <!-- 🔴 장애물 충돌 경고 팝업 -->
 <div id="obstacleFailPopup" class="obstacle-popup">
   <div class="obstacle-card obstacle-danger">
-<div class="obstacle-title">🚨장애물 충돌 발생🚨</div>
+<div class="obstacle-title">🚨 Obstacle Collision Occurred 🚨</div>
 <p class="obstacle-body">
-  선로 위 장애물을 그대로 지나쳤습니다.<br>
-  실제 상황에서는 즉시 비상제동을 체결하고, 관제에 보고해야 합니다.
+  You ran over an obstacle on the track.<br>
+  In a real situation, you must immediately apply emergency brakes and report to control.
 </p>
 <div class="obstacle-hint">
-  SPACE 키를 눌러 창을 닫고, 운전을 계속하십시오.
+  Press SPACE to close the window and continue driving.
 </div>
 
   </div>
@@ -4623,13 +4623,13 @@ window.__brakeGuideOn = true;
 <!-- 🟢 장애물 안전 정지 팝업 -->
 <div id="obstacleSuccessPopup" class="obstacle-popup">
   <div class="obstacle-card obstacle-success">
-    <div class="obstacle-title">비상 정지 완료</div>
+<div class="obstacle-title">🟢 Emergency Stop Successful 🟢</div>
 <p class="obstacle-body">
-  장애물 앞에 안전하게 정지하였습니다.<br>
-  장애물이 완전히 사라질 때 까지 기다린 뒤, 운행을 재개해 주세요.
+  You stopped safely in front of the obstacle.<br>
+  Please wait until the obstacle is completely cleared, then resume driving.
 </p>
 <div class="obstacle-hint">
-  SPACE 키를 눌러 창을 닫고, 운전을 계속하십시오.
+  Press SPACE to close the window and continue driving.
 </div>
 
   </div>
