@@ -1985,8 +1985,8 @@ function maybeSpawnEmergencyObstacle(initialDist) {
   if (Math.random() > 0.30) return;
 
 // 20m ~ 100m 사이 범위에서만 장애물 생성
-const minRange = 150;
-const maxRange = 250;
+const minRange = 140;
+const maxRange = 210;
 
 // 실제 가능한 최대 거리 (초기 남은거리보다 클 수 없음)
 const usableMax = Math.min(initialDist, maxRange);
@@ -2005,7 +2005,9 @@ const texturePaths = [
   "/static/textures/fall.png",
   "/static/textures/fall_woman.png",
   "/static/textures/rock.png",
-  "/static/textures/fire.png"
+  "/static/textures/fire.png",
+  "/static/textures/1000010930.png",
+  "/static/textures/1000010928.png",
 ];
 
 // 랜덤 선택
@@ -2480,7 +2482,7 @@ scene.add(ambient);
 // })();
 
   // === Red signs on platform every 50m up to 200m + 300 + 400 ===
-const signDistances = [0]; // m 단위 거리
+const signDistances = [0, 500]; // m 단위 거리
 
 // 기둥(폴)과 보드(판넬) 재질/형상
 const poleMat = new THREE.MeshStandardMaterial({ color: 0x444444, roughness: 0.6, metalness: 0.2 });
