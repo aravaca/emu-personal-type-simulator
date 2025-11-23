@@ -1,5 +1,5 @@
 git add .
-git commit -m "update feedback logic"
+git commit -m "fix texture bug"
 git push origin main
 
 pip install fastapi uvicorn[standard]
