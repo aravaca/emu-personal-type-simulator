@@ -1466,6 +1466,25 @@ const CAB_LAYOUTS = {
       [1884, 623],
     ],
     speedText: { x: 545, y: 1020, fontSize: 40, letterSpacing: 3 },
+    
+    needle: {
+      img: "/static/photos/needle.png", // 바늘 PNG 경로
+      width: 75, // SVG 안에서 바늘 크기
+      height: 45.23,
+
+      // cab.png 기준 계기판 중심 (임시 값)
+      cx: 517,
+      cy: 957,
+
+      // needle.png 안에서 바늘 축 위치 (임시 값: 이미지 중앙)
+      px: 62.86,
+      py: 33.82,
+
+      // 회전 범위 + 풀스케일 속도
+      minAngle: -60, // 0 km/h일 때 각도
+      maxAngle: 190, // maxSpeed일 때 각도
+      maxSpeed: 140 // 계기판 끝속도
+    },
   },
   n700s: {
     src: "/static/photos/n700s_cab.png",
@@ -1534,17 +1553,21 @@ function buildCabOverlay(layoutKey) {
     return;
   }
 
-  // Remove existing overlay
+  // 기존 오버레이 제거
   let existing = document.getElementById("cabOverlayFull");
   if (existing) existing.remove();
 
   const config = CAB_LAYOUTS[layoutKey] || CAB_LAYOUTS.default;
-  const { src, size, windowPoly, speedText } = config;
+  const { src, size, windowPoly, speedText, needle } = config;
   const CAB_W = size.width;
   const CAB_H = size.height;
 
+  // 오버레이 컨테이너
   const overlay = document.createElement("div");
   overlay.id = "cabOverlayFull";
+  overlay.style.position = "absolute";
+  overlay.style.inset = "0";
+  overlay.style.pointerEvents = "none"; // 클릭은 three.js로
   mount.appendChild(overlay);
 
   const svgNS = "http://www.w3.org/2000/svg";
@@ -1554,50 +1577,40 @@ function buildCabOverlay(layoutKey) {
   svg.setAttribute("height", "100%");
   svg.setAttribute("preserveAspectRatio", "xMidYMid slice");
 
-  // --- clipPath Logic Updated for Multiple Polygons ---
+  // === 1) cab 창문 clipPath (기존 코드 복원) ===
   const defs = document.createElementNS(svgNS, "defs");
   const cp = document.createElementNS(svgNS, "clipPath");
   cp.setAttribute("id", "cabWindowClip");
   cp.setAttribute("clipPathUnits", "userSpaceOnUse");
 
   const path = document.createElementNS(svgNS, "path");
-  
-  // 1. Start with the full rectangular canvas
-  let d = `M0 0 H${CAB_W} V${CAB_H} H0 Z `; 
 
-  // 2. Normalize windowPoly to always be an array of polygons
-  // Check if the first element is a number (point [x,y]) or an array (polygon [[x,y]...])
+  // 전체 사각형 + windowPoly로 구멍 뚫기
+  let d = `M0 0 H${CAB_W} V${CAB_H} H0 Z `;
+
   let polygons = [];
   if (windowPoly && windowPoly.length > 0) {
-    // If windowPoly[0][0] is a number, it's a single polygon like [[0,0], [10,10]]
-    // If windowPoly[0][0] is undefined or array, it's likely [[ [0,0]... ], [ [10,10]... ]]
-    const isSinglePoly = typeof windowPoly[0][0] === 'number';
+    const isSinglePoly = typeof windowPoly[0][0] === "number";
     polygons = isSinglePoly ? [windowPoly] : windowPoly;
   }
 
-  // 3. Loop through every polygon and carve them out
   polygons.forEach(poly => {
     poly.forEach(([x, y], i) => {
-        // If it's the first point, Move (M), otherwise Line (L)
-        d += (i === 0 ? ` M${x} ${y}` : ` L${x} ${y}`);
+      d += (i === 0 ? ` M${x} ${y}` : ` L${x} ${y}`);
     });
-    d += " Z "; // Close this specific window hole
+    d += " Z ";
   });
 
   path.setAttribute("d", d);
   path.setAttribute("fill", "black");
-  
-  // 'evenodd' is crucial here: it allows multiple sub-paths to create holes in the main shape
-  path.setAttribute("fill-rule", "evenodd"); 
+  path.setAttribute("fill-rule", "evenodd");
   path.setAttribute("clip-rule", "evenodd");
-  
+
   cp.appendChild(path);
   defs.appendChild(cp);
   svg.appendChild(defs);
 
-  // --- Rest of the function remains the same ---
-
-  // cab PNG
+  // === 2) cab PNG 이미지 ===
   const img = document.createElementNS(svgNS, "image");
   img.setAttributeNS("http://www.w3.org/1999/xlink", "href", src);
   img.setAttribute("x", "0");
@@ -1607,23 +1620,58 @@ function buildCabOverlay(layoutKey) {
   img.setAttribute("clip-path", "url(#cabWindowClip)");
   svg.appendChild(img);
 
-  // Speed Text
-  const spCfg = speedText || { x: CAB_W / 2, y: CAB_H / 2, fontSize: 80, letterSpacing: 8 };
+  // === 3) 속도 숫자 텍스트 ===
+  const spCfg = speedText || {
+    x: CAB_W / 2,
+    y: CAB_H / 2,
+    fontSize: 80,
+    letterSpacing: 8,
+  };
   const speedTextNode = document.createElementNS(svgNS, "text");
   speedTextNode.setAttribute("id", "svgSpeed");
   speedTextNode.setAttribute("x", spCfg.x);
   speedTextNode.setAttribute("y", spCfg.y);
   speedTextNode.setAttribute("text-anchor", "end");
   speedTextNode.setAttribute("fill", "#eaffff");
-  speedTextNode.setAttribute("font-family", `'Orbitron', system-ui, sans-serif`);
+  speedTextNode.setAttribute(
+    "font-family",
+    `'Orbitron', system-ui, sans-serif`
+  );
   speedTextNode.setAttribute("font-size", spCfg.fontSize);
   speedTextNode.setAttribute("letter-spacing", spCfg.letterSpacing);
   speedTextNode.setAttribute("font-weight", "700");
   speedTextNode.setAttribute("font-style", "italic");
   speedTextNode.textContent = "0";
   svg.appendChild(speedTextNode);
-overlay.appendChild(svg);
 
+  // === 4) 속도계 바늘 (needle) ===
+  if (needle) {
+    const { img: nImg, width, height, cx, cy, px, py } = needle;
+
+    const needleGroup = document.createElementNS(svgNS, "g");
+    needleGroup.setAttribute("id", "svgSpeedNeedle");
+    needleGroup.setAttribute("transform", `translate(${cx}, ${cy}) rotate(0)`);
+
+    const needleImg = document.createElementNS(svgNS, "image");
+    needleImg.setAttributeNS("http://www.w3.org/1999/xlink", "href", nImg);
+    needleImg.setAttribute("width", width);
+    needleImg.setAttribute("height", height);
+    needleImg.setAttribute("x", -px);
+    needleImg.setAttribute("y", -py);
+
+    needleGroup.appendChild(needleImg);
+    svg.appendChild(needleGroup);
+
+    // 전역에 저장해서 updateInstrumentHUD에서 쓸 수 있게
+    window.__svgNeedleElem = needleGroup;
+    window.__svgNeedleConfig = needle;
+  } else {
+    window.__svgNeedleElem = null;
+    window.__svgNeedleConfig = null;
+  }
+
+  // === 5) SVG를 overlay에 붙이기 ===
+  overlay.appendChild(svg);
   // ----------------------------------------------------
   // 🔽 KTX / N700S 제외하고 mini brake ladder를 SVG로 고정
   // ----------------------------------------------------
@@ -1796,11 +1844,32 @@ overlay.appendChild(svg);
   }
 }
 
-// 속도 숫자 업데이트 (ws.onmessage에서 사용)
+
 function updateInstrumentHUD({ speed }) {
+  const v = Number(speed ?? 0);
+
+  // 1) 디지털 숫자
   const s = document.getElementById("svgSpeed");
-  if (!s) return;
-  s.textContent = String(Math.round(speed ?? 0));
+  if (s) {
+    s.textContent = String(Math.round(v));
+  }
+
+  // 2) 아날로그 바늘 회전
+  const needleGroup = window.__svgNeedleElem;
+  const cfg = window.__svgNeedleConfig;
+
+  if (needleGroup && cfg) {
+    const { minAngle, maxAngle, maxSpeed, cx, cy } = cfg;
+
+    const clamped = Math.max(0, Math.min(maxSpeed, v));
+    const t = clamped / maxSpeed;
+    const angle = minAngle + (maxAngle - minAngle) * t;
+
+    needleGroup.setAttribute(
+      "transform",
+      `translate(${cx}, ${cy}) rotate(${angle})`
+    );
+  }
 }
 window.updateInstrumentHUD = updateInstrumentHUD;
 
@@ -2050,16 +2119,6 @@ function getCabLayoutKeyFromVehicle(filePath) {
   return "default";
 }
 
-
-
-// 기존 updateInstrumentHUD 이름을 그대로 재사용해서,
-// ws.onmessage 코드 수정 최소화
-function updateInstrumentHUD({ speed }) {
-  const s = document.getElementById("svgSpeed");
-  if (!s) return;
-  s.textContent = String(Math.round(speed ?? 0));
-}
-window.updateInstrumentHUD = updateInstrumentHUD;
 
   function resize(){
     // If a runtime-forced fixed size exists, use it (we lock size without changing UI)
