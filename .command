@@ -1,5 +1,5 @@
 git add .
-git commit -m "fix texture bug"
+git commit -m "40fps frame cap"
 git push origin main
 
 pip install fastapi uvicorn[standard]

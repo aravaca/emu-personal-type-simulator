@@ -3018,10 +3018,18 @@ camera.lookAt(xOffset, yOffset, zOffset);
 
 }
 
-  // --- 루프 ---
-  let lastRAF = 0;
-  function tick(t){
+// 🔥 목표 FPS (원하면 24, 30, 45 등으로 바꿔도 됨)
+  const TARGET_FPS = 40;
+  const FRAME_INTERVAL = 1000 / TARGET_FPS;
+  let lastRenderTime = 0;
 
+  function tick(t) {
+    // 프레임 스킵: 너무 자주 그리려고 하면 건너뛰기
+    if (t - lastRenderTime < FRAME_INTERVAL) {
+      requestAnimationFrame(tick);
+      return;
+    }
+    lastRenderTime = t;
     if (st) drawHUD(st);
     if (modeSel?.value === 'on'){
   // 진행감: 자갈/트랙 텍스처 스크롤(매 프레임 반복수 변경)
