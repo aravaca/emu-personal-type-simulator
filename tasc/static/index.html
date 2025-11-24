@@ -857,16 +857,16 @@ body {
 
   /* 살짝 눌린 인쇄 느낌 */
   text-shadow:
-    0 0.5px 0 rgba(255,255,255,0.9),
-    0 1.5px 0 rgba(0,0,0,0.15);
+    0 0.5px 0 rgba(0, 0, 0, 1),
+    0 1.5px 0 rgba(0,0,0,1);
 }
 
 /* 점수에 따라 JS가 넣어주는 색 (빨강~주황~초록 그라데이션) */
 .score-overlay[data-color] .score-value {
   color: var(--score-color, #222222);
   text-shadow:
-    0 0.5px 0 rgba(255,255,255,0.95),
-    0 1.5px 0 rgba(0,0,0,0.18),
+    0 0.5px 0 rgba(0, 0, 0, 1),
+    0 1.5px 0 rgba(0,0,0,1),
     0 0 14px var(--score-glow, rgba(0,0,0,0.08));
 }
 
@@ -1356,7 +1356,7 @@ function handleObstacleState(st) {
   // rem: 정차 위치까지의 남은 거리
   // hazardDist: 장애물 위치까지의 남은 거리
   // → rem ∈ [hazardDist, hazardDist+200] & v≈0
-  if (rem >= hazardDist && rem <= hazardDist + 500 && speed < 0.1) {
+  if (rem >= hazardDist && rem <= hazardDist + 200 && speed > 0.1 && speed < 0.2) {
     hazardInfo.handled = true;
     showObstacleSuccess();
     scheduleObstacleClear();
@@ -2670,7 +2670,7 @@ const groundMat = new THREE.MeshStandardMaterial({
 
 const ground = new THREE.Mesh(new THREE.PlaneGeometry(20, 12000, 1, 1), groundMat);
 ground.rotation.x = -Math.PI / 2;
-ground.position.y = 0.0;
+ground.position.y = -0.1;
 ground.position.z = 200;
 ground.receiveShadow = false;
 ground.castShadow = false;
