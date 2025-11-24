@@ -2318,7 +2318,7 @@ function maybeSpawnEmergencyObstacle(initialDist) {
   if (!initialDist || initialDist <= 20) return;
 
   // 🎲 40% 확률로만 장애물 생성
-  if (Math.random() > 0.30) return;
+  if (Math.random() > 0.40) return;
 
   // 140m ~ 210m 사이에서만 장애물 위치 선택
   const minRange = 140;
@@ -4784,7 +4784,7 @@ window.__brakeGuideOn = true;
             "팁: Q키는 최대 상용 가속을 발동시킵니다.",
             "팁: 정차 직전 마스콘을 풀었다 다시 조작하는 일명 \"톱질\" 행위는 승차감을 크게 저하시킵니다.",
             "팁: 정차 도중 역행(재가속) 취급은 절대 금물입니다.",
-            "팁: 랜덤 토글을 켜면 30% 확률로 선로 위에 장애물이 나타납니다. 주행 시 항상 주의를 기울이세요."
+            "팁: 랜덤 토글을 켜면 40% 확률로 선로 위에 장애물이 나타납니다. 주행 시 항상 주의를 기울이세요."
           ];
 
           return tips[Math.floor(Math.random() * tips.length)];
@@ -4841,7 +4841,7 @@ window.__brakeGuideOn = true;
       "Tip: Check the remaining distance and stop gently with B1/B2 to ensure a smooth ride.",
       "Tip: Reapplying and releasing the master controller just before stopping can severely affect ride comfort.",
       "Tip: Never consider re-acceleration while bringing the train to a stop.",
-      "Tip: Enabling the Random toggle introduces a 30% chance of obstacles appearing on the track. Stay alert while driving."
+      "Tip: Enabling the Random toggle introduces a 40% chance of obstacles appearing on the track. Stay alert while driving."
     ];
 
     return tips[Math.floor(Math.random() * tips.length)];
