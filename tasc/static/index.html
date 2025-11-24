@@ -1296,6 +1296,18 @@ window.addEventListener("DOMContentLoaded", () => {
   });
 });
 
+
+function resetHazardState() {
+  if (hazardInfo.timeoutId) {
+    clearTimeout(hazardInfo.timeoutId);
+    hazardInfo.timeoutId = null;
+  }
+  hazardInfo.active = false;
+  hazardInfo.dist = null;
+  hazardInfo.handled = false;
+  hazardInfo.success = false; // success 플래그 추가했다면 같이 초기화
+}
+
 function anyObstaclePopupVisible() {
   return (obstacleFailPopup && obstacleFailPopup.classList.contains("visible")) ||
          (obstacleSuccessPopup && obstacleSuccessPopup.classList.contains("visible"));
@@ -1347,6 +1359,8 @@ function scheduleObstacleClear() {
 // 상태(State) 들어올 때마다 호출해서 이벤트 판단
 function handleObstacleState(st) {
   if (!hazardInfo.active || hazardInfo.handled || !st) return;
+    // ✅ 이미 끝난 런이면 장애물 판정 안 함
+  if (st.finished) return;
   const rem = Number(st.remaining_m ?? 0);
   const speed = Number(st.v ?? 0); // m/s
   const hazardDist = hazardInfo.dist;
@@ -2574,14 +2588,8 @@ function clearEmergencyObstacle() {
     emergencyObstacleLight = null;
   }
 
-  // 🔄 장애물 상태 초기화
-  hazardInfo.active = false;
-  hazardInfo.dist = null;
-  hazardInfo.handled = false;
-  if (hazardInfo.timeoutId) {
-    clearTimeout(hazardInfo.timeoutId);
-    hazardInfo.timeoutId = null;
-  }
+// 🔄 장애물 상태 초기화
+  resetHazardState();
 }
 
 
@@ -3843,6 +3851,14 @@ if (fb) {
 
 /* ===== 시작/재시작 ===== */
 function startRun(){
+
+  // ✅ 새 런 시작할 때 장애물 상태 / 팝업 완전 리셋
+  hideObstaclePopups(); // 혹시 남아있는 팝업 닫기
+  if (window.clearEmergencyObstacle) {
+    try { clearEmergencyObstacle(); } catch (e) {}
+  } else {
+    resetHazardState();
+  }
 
   
   // ✅ 새 런 시작할 때 점수 오버레이 숨기기
