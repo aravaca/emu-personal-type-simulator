@@ -1,5 +1,5 @@
 git add .
-git commit -m "fix inital decel eval bug"
+git commit -m "normalize final score"
 git push origin main
 
 pip install fastapi uvicorn[standard]

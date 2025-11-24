@@ -1237,13 +1237,16 @@ class StoppingSim:
                     st.issues["timeout_overrun_s"] = over_s
                     st.issues["timeout_penalty"] = int(overtime_pen)
                 # 남은 시간이 양수(조기 도착)인 경우는 보너스/페널티 없음
-            if score < -1100:
-                score = -1100
+
+            minq = 300
+            maxq = 1700
+            if score < minq:
+                score = minq    
             
-            if score > 2700:
-                score = 2700
-                
-            norm = (score + 1100) / 3800 * 100
+            if score > maxq:
+                score = maxq
+
+            norm = (score - minq) / (maxq - minq) * 100
             norm = max(0, min(100, norm))
             score = round(norm, 0)
             st.score = score
