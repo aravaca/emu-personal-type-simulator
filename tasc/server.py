@@ -134,7 +134,7 @@ class Scenario:
     v0: float = 25.0
     grade_percent: float = 0.0
     mu: float = 1.0
-    dt: float = 0.1 #0.01
+    dt: float = 0.0025 #0.01
 
     @classmethod
     def from_json(cls, filepath):
@@ -147,7 +147,7 @@ class Scenario:
             v0=v0_ms,
             grade_percent=data.get("grade_percent", 0.0),
             mu=data.get("mu", 1.0),
-            dt=data.get("dt", 0.1), #0.005
+            dt=data.get("dt", 0.0025), #0.005
         )
 
 
@@ -208,6 +208,11 @@ class StoppingSim:
         # 초기 제동(B1/B2) 판정
         self.first_brake_start: Optional[float] = None
         self.first_brake_done: bool = False
+
+        # ▼ 추가: 정확 판정을 위한 상태
+        self.first_brake_notch: Optional[int] = None # 1 또는 2로 고정
+        self.first_brake_start_t: Optional[float] = None
+        self.seen_zero_notch: bool = False # NOTCH_HISTORY[0] == 0 보장용
 
         # 기록
         self.notch_history: List[int] = []
@@ -644,6 +649,9 @@ class StoppingSim:
 
         self.first_brake_start = None
         self.first_brake_done = False
+        self.first_brake_notch = None
+        self.first_brake_start_t = None
+        self.seen_zero_notch = False
         self.eb_used = False
         self.notch_history.clear()
         self.time_history.clear()
@@ -1008,18 +1016,34 @@ class StoppingSim:
 
         while self._cmd_queue and self._cmd_queue[0]["t"] <= st.t:
             self._apply_command(self._cmd_queue.popleft())
-
+        
+        # if self.notch_history[-1] != st.lever_notch:
         self.notch_history.append(st.lever_notch)
-        self.time_history.append(st.t)
-        if not self.first_brake_done:
-            if st.lever_notch in (1, 2):
-                if self.first_brake_start is None and not self.tasc_active:
-                    self.first_brake_start = self.state.t
 
-                elif (st.t - self.first_brake_start) >= 1.0:
-                    self.first_brake_done = True
+        self.time_history.append(st.t)
+        # --- 기존 first_brake_done 로직 삭제하고 아래로 교체 ---
+        # 초기 0단을 한번이라도 봤는지 표시
+        if not self.seen_zero_notch and st.lever_notch == 0:
+            self.seen_zero_notch = True
+
+        if not self.first_brake_done and self.seen_zero_notch and not self.tasc_active:
+            cur = st.lever_notch
+            prev = self.notch_history[-2] if len(self.notch_history) >= 2 else None
+
+            if self.first_brake_notch is None:
+                # 0 → (1|2)로 '처음' 진입했을 때만 스타트
+                if prev == 0 and cur in (1, 2):
+                    self.first_brake_notch = cur
+                    self.first_brake_start_t = st.t
             else:
-                self.first_brake_start = None
+                # 같은 단을 유지해야 함 (1↔2 스위칭도 NG)
+                if cur == self.first_brake_notch:
+                    if (st.t - self.first_brake_start_t) >= 0.999: # float 여유
+                        self.first_brake_done = True
+                else:
+                    # 1초 채우기 전 이탈(0, 3이상, 전진단, 또는 1↔2 변경) → 리셋
+                    self.first_brake_notch = None
+                    self.first_brake_start_t = None
 
         # ▼ 타이머(카운트다운): 0 아래로도 계속 진행
         if st.timer_enabled and not st.finished:
@@ -1213,7 +1237,15 @@ class StoppingSim:
                     st.issues["timeout_overrun_s"] = over_s
                     st.issues["timeout_penalty"] = int(overtime_pen)
                 # 남은 시간이 양수(조기 도착)인 경우는 보너스/페널티 없음
-
+            if score < -1100:
+                score = -1100
+            
+            if score > 2700:
+                score = 2700
+                
+            norm = (score + 1100) / 3800 * 100
+            norm = max(0, min(100, norm))
+            score = round(norm, 0)
             st.score = score
             self.running = False
             if DEBUG:

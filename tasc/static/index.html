@@ -4763,15 +4763,15 @@ window.__brakeGuideOn = true;
       btnStart: "Start (Space)",
       btnMobileRestart: "재시작",
       feedback: {
-        early_good: "초기 제동을 수행함 — 부드럽게 제동 진입",
-        early_bad: "초기 제동을 게을리함 — 승차감 불쾌",
+        early_good: "초제동을 수행함 — 부드럽게 제동 진입",
+        early_bad: "초제동을 게을리함 — 승차감 불쾌",
         stop_good: "정차 시 B1/B2로 정차함 — 정차 승차감 양호",
         stop_bad: "정차 시 B1/B2로 정차하지 않음 — 승차감 불쾌",
         step_good: "기본제동 (계단제동/완해) 수행함",
         step_bad: "기본제동 (계단제동/완해) 미흡 — 불규칙한 제동 패턴으로 인한 승차감 불쾌",
         eb_good: "영업 안전 제동범위 준수",
         eb_bad: "비상제동(EB) 체결 — 급감속 충격",
-        score: n=>`최종 점수: ${n}점`,
+        score: n=>`최종 점수: ${n}/100점`,
         stopErr: m=>`정지 오차: ${m.toFixed(2)} m`,
          hintIdle: () => {
           const tips = [
@@ -4820,15 +4820,15 @@ window.__brakeGuideOn = true;
       btnStart: "Start (Space)",
       btnMobileRestart: "Restart",
       feedback: {
-  early_good: "You braked early — smooth initial deceleration",
-  early_bad: "You braked late — the ride felt rough",
+  early_good: "Performed initial braking with B1 — smooth initial deceleration",
+  early_bad: "Failed to perform initial braking  — the ride felt rough",
   stop_good: "Stopped with B1/B2 — smooth stop",
   stop_bad: "Failed to stop with B1/B2 — rough stop",
   step_good: "Stepwise braking was applied correctly",
   step_bad: "Stepwise braking was poor, causing jolts and discomfort for passengers",
   eb_good: "Safe braking range observed — no EB applied",
   eb_bad: "EB applied, causing a harsh jolt",
-  score: n => `Final score: ${n}`,
+  score: n => `Final score: ${n}/100`,
   stopErr: m => `Stopping error: ${m.toFixed(2)} m`,
   hintIdle: () => {
     const tips = [
