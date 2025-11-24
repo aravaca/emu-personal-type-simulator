@@ -761,6 +761,139 @@ body {
   -webkit-touch-callout: none;
 }
 
+.score-overlay {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  pointer-events: none;
+  z-index: 8;
+
+  opacity: 0;
+  transform: translateY(-12vh) scale(0.94);
+  transition: opacity 0.3s ease-out, transform 0.3s ease-out;
+}
+
+.score-overlay.visible {
+  opacity: 1;
+  transform: translateY(-12vh) scale(1);
+}
+
+/* 카드 전체: 역 안내판/종이 승차권 같은 느낌 */
+.score-card {
+  min-width: 260px;
+  max-width: 460px;
+  padding: 22px 28px 24px;
+  border-radius: 16px;
+
+  /* 따뜻한 하얀색 + 살짝 종이 느낌 그라데이션 */
+  background:
+    linear-gradient(180deg,
+      rgba(255,255,255,0.62),
+      rgba(250,247,238,0.65)
+    );
+
+  /* 살짝 반투명하게 */
+  opacity: 0.96;
+  backdrop-filter: blur(10px);
+  -webkit-backdrop-filter: blur(10px);
+
+  /* 아날로그 보드 같은 테두리 */
+  border: 1px solid rgba(185, 178, 155, 0.95);
+  box-shadow:
+    0 10px 26px rgba(0,0,0,0.32),
+    0 0 0 1px rgba(255,255,255,0.65) inset;
+
+  text-align: center;
+  font-family: 'A-OTF Shin Go Pro', system-ui, -apple-system, 'Segoe UI', sans-serif;
+  position: relative;
+}
+
+/* 상단 얇은 색 라인 (일본 역 안내판 포인트 컬러)
+.score-card::before {
+  content: "";
+  position: absolute;
+  left: 14px;
+  right: 14px;
+  top: 10px;
+  height: 3px;
+  border-radius: 999px;
+  background: linear-gradient(90deg, #c83f2e, #f0a030);
+  opacity: 0.9;
+} */
+
+/* 좌우 작은 인쇄 구멍(?) / 티켓 느낌 장식 */
+.score-card::after {
+  content: "";
+  position: absolute;
+  top: 50%;
+  left: 6px;
+  right: 6px;
+  height: 0;
+  border-top: 1px dashed rgba(180, 172, 150, 0.7);
+  opacity: 0.7;
+}
+
+/* 라벨: 작은 문자, 일본식 안내 폰트 느낌 */
+.score-label {
+  margin-top: 8px;
+  font-size: 0.78rem;
+  letter-spacing: 0.22em;
+  text-transform: uppercase;
+  color: #686055;
+  opacity: 0.9;
+}
+
+/* 메인 점수: 아날로그 숫자 계기판 느낌 */
+.score-value {
+  margin-top: 6px;
+  font-size: clamp(2.8rem, 4.4vw, 3.8rem);
+  font-weight: 800;
+  letter-spacing: 0.12em;
+  font-variant-numeric: tabular-nums;
+
+  color: #222222;
+
+  /* 살짝 눌린 인쇄 느낌 */
+  text-shadow:
+    0 0.5px 0 rgba(255,255,255,0.9),
+    0 1.5px 0 rgba(0,0,0,0.15);
+}
+
+/* 점수에 따라 JS가 넣어주는 색 (빨강~주황~초록 그라데이션) */
+.score-overlay[data-color] .score-value {
+  color: var(--score-color, #222222);
+  text-shadow:
+    0 0.5px 0 rgba(255,255,255,0.95),
+    0 1.5px 0 rgba(0,0,0,0.18),
+    0 0 14px var(--score-glow, rgba(0,0,0,0.08));
+}
+
+/* 서브 문구: 한 줄 안내 문구 (정차 평가) */
+.score-sub {
+  margin-top: 10px;
+  font-size: 0.95rem;
+  color: #403a33;
+  font-weight: 600;
+}
+
+/* 메타 정보: 정지 오차 등 */
+.score-meta {
+  margin-top: 4px;
+  font-size: 0.82rem;
+  color: #7a7264;
+}
+
+/* 작은 조명 인디케이터 느낌 (옵션: 필요 없으면 지워도 됨)
+.score-meta::before {
+  content: "●";
+  display: inline-block;
+  margin-right: 6px;
+  font-size: 0.6rem;
+  color: #c83f2e;
+  vertical-align: baseline;
+} */
 
 /* === 3D 캔버스 안에 붙는 작은 브레이크 곡선 HUD === */
 #cab3d #hud {
@@ -1004,6 +1137,138 @@ body {
 <script>
 
 
+let scoreOverlayEl = null;
+let scoreValueEl = null;
+let scoreSubEl = null;
+let scoreMetaEl = null;
+let scoreAnimId = null;
+let scoreAnimStartTs = null;
+let scoreAnimFrom = 0;
+let scoreAnimTo = 0;
+let lastFinishedFlag = false; // ws 상태의 finished 변화를 감지
+
+function initScoreOverlayDom() {
+  scoreOverlayEl = document.getElementById("scoreOverlay");
+  scoreValueEl = document.getElementById("scoreOverlayValue");
+  scoreSubEl = document.getElementById("scoreOverlaySub");
+  scoreMetaEl = document.getElementById("scoreOverlayMeta");
+}
+
+function lerpChannel(a, b, t) {
+  return Math.round(a + (b - a) * t);
+}
+
+
+function colorFromScore(score) {
+  const s = Math.max(0, Math.min(100, score || 0)) / 100;
+
+  // 끝점 색상
+  const red = { r: 0xff, g: 0x4b, b: 0x4b }; // #ff4b4b (낮은 점수)
+  const mid = { r: 0xff, g: 0xb8, b: 0x4d }; // #ffb84d (예쁜 주황+노랑)
+  const green = { r: 0x4c, g: 0xd9, b: 0x64 }; // #4cd964 (높은 점수)
+
+  let c;
+  if (s <= 0.5) {
+    // 0~50점: 빨강 → 주황
+    const t = s / 0.5;
+    c = {
+      r: lerpChannel(red.r, mid.r, t),
+      g: lerpChannel(red.g, mid.g, t),
+      b: lerpChannel(red.b, mid.b, t),
+    };
+  } else {
+    // 50~100점: 주황 → 초록
+    const t = (s - 0.5) / 0.5;
+    c = {
+      r: lerpChannel(mid.r, green.r, t),
+      g: lerpChannel(mid.g, green.g, t),
+      b: lerpChannel(mid.b, green.b, t),
+    };
+  }
+
+  const rgb = `rgb(${c.r}, ${c.g}, ${c.b})`;
+  const glow = `rgba(${c.r}, ${c.g}, ${c.b}, 0.92)`;
+  return { rgb, glow };
+}
+function formatScore(n) {
+  const v = Math.max(0, Math.min(100, Math.round(n)));
+  return v.toString().padStart(1, "0");
+}
+
+function chooseSubMessage(score, stopErr) {
+  // const s = Math.max(0, Math.min(100, score || 0));
+  // const e = Math.abs(stopErr ?? 0);
+
+  // if (e <= 0.15 && s >= 98) return "💎 Perfect stop!";
+  // if (e <= 0.3 && s >= 95) return "🎯 Almost perfect!";
+  // if (s >= 90) return "🚆 Great braking control!";
+  // if (s >= 75) return "👍 Nice run. Can be smoother.";
+  // if (s >= 50) return "📝 Try to brake a bit earlier.";
+  // return "💡 Watch distance & brake in steps.";
+  return "수고하셨습니다."
+}
+
+function showScoreOverlay(finalScore, stopErr) {
+  if (!scoreOverlayEl || !scoreValueEl || !scoreSubEl || !scoreMetaEl) {
+    initScoreOverlayDom();
+    if (!scoreOverlayEl) return;
+  }
+
+  // 애니메이션 초기화
+  if (scoreAnimId) cancelAnimationFrame(scoreAnimId);
+  scoreAnimStartTs = null;
+  scoreAnimFrom = 0;
+  scoreAnimTo = Math.max(0, Math.min(100, finalScore || 0));
+
+  const subMsg = chooseSubMessage(scoreAnimTo, stopErr);
+  scoreSubEl.textContent = subMsg;
+
+  const errText = (typeof stopErr === "number")
+    ? `Stop error: ${stopErr.toFixed(2)} m`
+    : "";
+  scoreMetaEl.textContent = errText;
+
+  scoreOverlayEl.classList.add("visible");
+
+  const duration = 1200; // ms
+
+  function step(ts) {
+    if (!scoreAnimStartTs) scoreAnimStartTs = ts;
+    const t = Math.min(1, (ts - scoreAnimStartTs) / duration);
+    const current = scoreAnimFrom + (scoreAnimTo - scoreAnimFrom) * t;
+    const c = colorFromScore(current);
+
+    scoreValueEl.textContent = formatScore(current);
+    scoreOverlayEl.style.setProperty("--score-color", c.rgb);
+    scoreOverlayEl.style.setProperty("--score-glow", c.glow);
+    scoreOverlayEl.dataset.color = "on";
+
+    if (t < 1) {
+      scoreAnimId = requestAnimationFrame(step);
+    } else {
+      scoreAnimId = null;
+    }
+  }
+  scoreAnimId = requestAnimationFrame(step);
+}
+
+function hideScoreOverlay() {
+  if (!scoreOverlayEl) initScoreOverlayDom();
+
+  // DOM 쪽 상태 강제 리셋
+  if (scoreOverlayEl) {
+    scoreOverlayEl.classList.remove("visible");
+    scoreOverlayEl.style.opacity = ""; // 트랜지션 무시하고 바로 0
+    scoreOverlayEl.style.transform = "";
+    scoreOverlayEl.dataset.color = "";
+  }
+
+  // 애니메이션 루프도 완전히 정지
+  if (scoreAnimId) {
+    cancelAnimationFrame(scoreAnimId);
+    scoreAnimId = null;
+  }
+}
 
 // 🔴🟢 선로 장애물 상태 관리
 let hazardInfo = {
@@ -1162,6 +1427,16 @@ function handleObstacleState(st) {
 
     <!-- 🔹 3D 오른쪽 아래 브레이크 곡선 HUD -->
     <canvas id="hud"></canvas>
+
+        <!-- 🔹 게임 종료 시 중앙 점수 오버레이 -->
+    <div id="scoreOverlay" class="score-overlay">
+      <div class="score-card">
+        <div class="score-label">FINAL SCORE</div>
+        <div class="score-value" id="scoreOverlayValue">000</div>
+        <div class="score-sub" id="scoreOverlaySub">Perfect stop!</div>
+        <div class="score-meta" id="scoreOverlayMeta"></div>
+      </div>
+    </div>
 
 </div>
 
@@ -3569,6 +3844,10 @@ if (fb) {
 /* ===== 시작/재시작 ===== */
 function startRun(){
 
+  
+  // ✅ 새 런 시작할 때 점수 오버레이 숨기기
+  hideScoreOverlay();
+
     // ✅ 랜덤 토글이 켜져 있다면 값 먼저 섞기
   const rndEl = document.getElementById('rndToggle');
   if (rndEl && rndEl.checked) {
@@ -3635,6 +3914,7 @@ addEventListener("keydown", (e) => {
   if(e.repeat) return;
 
   if (e.key === " ") {
+    hideScoreOverlay();
     // 🔁 팝업이 떠있으면 먼저 닫기만 하고, 게임은 재시작하지 않음
     if (anyObstaclePopupVisible()) {
       hideObstaclePopups();
@@ -3725,6 +4005,15 @@ ws.onmessage = (ev) => {
   // 상태 저장
   st = msg.payload;
   window.st = st;
+
+    // 🔥 게임 종료 시점 감지 → 점수 오버레이
+  const nowFinished = !!st.finished;
+  if (nowFinished && !lastFinishedFlag) {
+    const score = Number(st.score ?? 0);
+    const stopErr = Number(st.stop_error_m ?? 0);
+    showScoreOverlay(score, stopErr);
+  }
+  lastFinishedFlag = nowFinished;
     // 🔥 장애물 관련 이벤트 판정
   handleObstacleState(st);
   // 🔹 서버 상태에 train_name이 있으면 mini HUD 타이틀을 그걸로 사용
