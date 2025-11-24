@@ -4009,7 +4009,16 @@ ws.onmessage = (ev) => {
     // 🔥 게임 종료 시점 감지 → 점수 오버레이
   const nowFinished = !!st.finished;
   if (nowFinished && !lastFinishedFlag) {
-    const score = Number(st.score ?? 0);
+    let score = Number(st.score ?? 0);
+    const veh_name = vehicle.name.toLowerCase()
+    if (veh_name.includes("ktx") || veh_name.includes("n700s") || veh_name.includes("e26")) {
+      if (score > 0) {
+        score +=40; //고속열차 및 전기기관차는 완벽한 기본제동이 사실상 불가하므로 기본제동 점수 어드밴티지 부여
+        if (score >100) {
+          score = 100;
+        }
+      }
+    }
     const stopErr = Number(st.stop_error_m ?? 0);
     showScoreOverlay(score, stopErr);
   }
@@ -5187,7 +5196,18 @@ window.__brakeGuideOn = true;
         let rows = [];
         rows.push({ bad: !!issues.early_brake_too_short, goodText: fbd.early_good, badText: fbd.early_bad });
         rows.push({ bad: !!issues.stop_not_b1,           goodText: fbd.stop_good,  badText: fbd.stop_bad  });
-        rows.push({ bad: !!issues.step_brake_incomplete, goodText: fbd.step_good,  badText: fbd.step_bad  });
+        const veh_name = vehicle.name.toLowerCase()
+        const isSpecial =
+          veh_name.toLowerCase().includes("ktx") ||
+          veh_name.toLowerCase().includes("n700s") ||
+          veh_name.toLowerCase().includes("e26");
+
+        rows.push({
+          bad: isSpecial ? false : !!issues.step_brake_incomplete,
+          goodText: fbd.step_good,
+          badText: fbd.step_bad,
+        });
+
         rows.push({ bad: !!issues.unnecessary_eb_usage,  goodText: fbd.eb_good,    badText: fbd.eb_bad    });
 
         let html = rows.map(r =>
@@ -5195,7 +5215,16 @@ window.__brakeGuideOn = true;
         ).join("");
 
         const stopErr = Number(st.stop_error_m ?? 0);
-        const score   = Number(st.score ?? 0);
+        let score = Number(st.score ?? 0);
+        
+        if (veh_name.includes("ktx") || veh_name.includes("n700s") || veh_name.includes("e26")) {
+          if (score > 0) {
+            score +=40; //고속열차 및 전기기관차는 완벽한 기본제동이 사실상 불가하므로 기본제동 점수 어드밴티지 부여
+            if (score >100) {
+              score = 100;
+            }
+          }
+        }
         const goodErr = Math.abs(stopErr) <= 2;
 
         html += `<div class="${goodErr ? "ok" : "warn"}">${fbd.stopErr(stopErr)}</div>`;
