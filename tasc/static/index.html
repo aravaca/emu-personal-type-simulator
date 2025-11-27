@@ -4147,7 +4147,7 @@ class VVVFEngine {
     
     // (3) 모터 필터 공진 변화: 전력이 많이 들어가면 더 날카롭게 움
     const loadFactor = (powerNotch / (maxPowerNotch || 5)) || (brakeNotch / (maxBrakeNotch || 8)) || 0;
-    const filterFreq = 250 + loadFactor * 250; // 부하가 걸리면 필터가 열림 250~300 추천
+    const filterFreq = 500 + loadFactor * 500; // 부하가 걸리면 필터가 열림 300(듣기좋지만 먹먹함)~500(리얼함) 추천
     this.motorFilter.frequency.setTargetAtTime(filterFreq, t, 0.2);
 
 
