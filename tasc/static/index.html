@@ -1621,7 +1621,7 @@ function handleObstacleState(st) {
             <option value="3000">서울교통공사 3000호대 VVVF 전동차</option>
             <option value="N700S">신칸센 N700S계</option> 
             <option value="100000">한국철도공사 100000호대 전동차</option> 
-            <option value="EF510">EF510형 전기기관차 + E26계 객차</option> 
+            <!-- <option value="EF510">EF510형 전기기관차 + E26계 객차</option>  -->
             <option value="GE999">초차원기관 보일러 GR-0999-SV</option> 
           </select>
         </label>
@@ -1958,7 +1958,7 @@ const CAB_LAYOUTS = {
 function getCabLayoutKeyFromVehicle(filePath) {
   const lower = (filePath || "").toLowerCase();
   if (lower.includes("n700s")) return "n700s";
-  if (lower.includes("ktx1")) return "ktx";
+  if (lower.includes("ktx1") || lower.includes("999")) return "ktx";
   if (lower.includes("e721")) return "e721";
   if (lower.includes("e233")) return "e233";
 
@@ -2121,7 +2121,9 @@ function buildCabOverlay(layoutKey) {
     bg.setAttribute("rx", "4");
     bg.setAttribute("ry", "4");
     bg.setAttribute("fill", "rgba(0,0,0,0.40)");
-    // svg.appendChild(bg);
+    if (!vehicle.name.toLowerCase().includes("e233")) {
+    svg.appendChild(bg);
+    }
     
 
     // 블록/텍스트 그룹
