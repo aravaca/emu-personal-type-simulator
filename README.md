@@ -18,6 +18,7 @@ Supports:
 - **Emergency** scenarios including obstacles on track and rail suicides.
 - **Brake navigation** to explore efficient brake profiles (Toggle with B)
 - **Mini HUD** to assist trainees
+- Realistic VVVF sounds
 
 Powered by **Three.js 3D visualization**, the simulator delivers an immersive driver’s POV and realistic track environment.  
 Real-time **velocity–distance** and **braking curve** rendering provides intuitive, instant feedback.
