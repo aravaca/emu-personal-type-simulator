@@ -1793,6 +1793,50 @@ const CAB_LAYOUTS = {
       maxSpeed: 140 // 계기판 끝속도
     },
   },
+  e233: {
+    src: "/static/photos/e233_cab.png", // TODO: 실제 경로로 수정
+    size: { width: 1920, height: 1080 }, // TODO: PNG 원본 해상도
+    windowPoly: [[
+[568, 674],
+[1920, 674],
+[1920, 153],
+[539, 153],
+[535, 106],
+[474, 106],],
+[
+[0, 1005],
+[90, 947],
+[109, 922],
+[122, 882],
+[126, 799],
+[115, 370],
+[101, 322],
+[84, 288],
+[57, 259],
+[0, 247],
+]
+    ],
+    speedText: { x: 767, y: 1010, fontSize: 35, letterSpacing: 3 },
+    
+    needle: {
+      img: "/static/photos/needle.png", // 바늘 PNG 경로
+      width: 60, // SVG 안에서 바늘 크기
+      height: 36.184,
+
+      // cab.png 기준 계기판 중심 (임시 값)
+      cx: 745,
+      cy: 959,
+
+      // needle.png 안에서 바늘 축 위치 (임시 값: 이미지 중앙)
+      px: 50.2,
+      py: 26.95,
+
+      // 회전 범위 + 풀스케일 속도
+      minAngle: -54, // 0 km/h일 때 각도
+      maxAngle: 187, // maxSpeed일 때 각도
+      maxSpeed: 160 // 계기판 끝속도
+    },
+  },
   n700s: {
     src: "/static/photos/n700s_cab.png",
     size: { width: 1880, height: 1040 },
@@ -1916,6 +1960,7 @@ function getCabLayoutKeyFromVehicle(filePath) {
   if (lower.includes("n700s")) return "n700s";
   if (lower.includes("ktx1")) return "ktx";
   if (lower.includes("e721")) return "e721";
+  if (lower.includes("e233")) return "e233";
 
   // 필요하면 EF510, 서울 3000 등도 여기에 else-if로 추가
   return "default";
@@ -2054,12 +2099,19 @@ function buildCabOverlay(layoutKey) {
     // 혹시 예전 캔버스 버전이 남아있다면 비활성화
     window.drawMiniBrakeLadder = undefined;
 
-    // cab 원본 좌표 기준 자리 잡기 (적당히 조정 가능)
-    const ladderX = CAB_W - 1640; // 오른쪽에서 살짝 안쪽
-    const ladderY = CAB_H - 203; // 아래에서 조금 위
-    const ladderW = 34;
-    const ladderH = 155;
+    let ladderX = CAB_W - 1640; // 오른쪽에서 살짝 안쪽
+    let ladderY = CAB_H - 203; // 아래에서 조금 위
+    let ladderW = 34;
+    let ladderH = 155;
 
+    if (vehicle.name.toLowerCase().includes("e233")) {
+      // E233 차량일 경우 다른 값 적용
+      ladderX = CAB_W - 1396; // 오른쪽에서 살짝 안쪽
+      ladderY = CAB_H - 198; // 아래에서 조금 위
+      ladderW = 34;
+      ladderH = 131;
+    }
+        
     // 배경 박스
     const bg = document.createElementNS(svgNS, "rect");
     bg.setAttribute("x", ladderX);
@@ -2069,7 +2121,8 @@ function buildCabOverlay(layoutKey) {
     bg.setAttribute("rx", "4");
     bg.setAttribute("ry", "4");
     bg.setAttribute("fill", "rgba(0,0,0,0.40)");
-    svg.appendChild(bg);
+    // svg.appendChild(bg);
+    
 
     // 블록/텍스트 그룹
     const ladderGroup = document.createElementNS(svgNS, "g");
@@ -2094,6 +2147,14 @@ function buildCabOverlay(layoutKey) {
     const bH = (ladderH - pad * 2 - gap * (blocks - 1)) / blocks;
     const bW = ladderW - pad * 2;
     const x = ladderX + pad;
+    if (vehicle.name.toLowerCase().includes("e233")) {
+    const rotateAngle = 3; // 원하는 각도 (예: 10도)
+const centerX = ladderX + ladderW / 2; // 회전 중심 X
+const centerY = ladderY + ladderH / 2; // 회전 중심 Y
+
+// ladderGroup에 회전 transform 추가
+ladderGroup.setAttribute("transform", `rotate(${rotateAngle} ${centerX} ${centerY})`);
+    }
 
     const normalBlocks = []; // B1~B(EB-1) 사각형
     const normalTexts = []; // 그 위에 올라갈 숫자 텍스트
@@ -3467,12 +3528,12 @@ function syncCameraFromState() {
 const trainName = window.st?.train_name ?? '';
 const lowerName = trainName.toLowerCase();
 
+//기관사 시점 높이
 const y = (lowerName.includes('ktx') || lowerName.includes('999'))
   ? 3.0
   : lowerName.includes('e26')
     ? 3.5
-    : 2.8; //the rest, including n700s
-
+    : 2.8
   
 const z = 200 - rem;
 
@@ -3480,7 +3541,8 @@ const angle = (lowerName.includes('ktx') || lowerName.includes('999'))
   ? 0.5
   : (lowerName.includes('n700s') || lowerName.includes('e26'))
     ? 0.6
-    : 0.8; //the rest
+    : lowerName.includes('e233')
+    ? 0.4 : 0.8; //the rest, including n700s
 
 
 // 카메라를 살짝 왼쪽으로 이동시키고, 살짝 아래쪽을 바라보게 설정
