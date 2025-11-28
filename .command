@@ -1,5 +1,5 @@
 git add .
-git commit -m "readme update"
+git commit -m "e233 speedtext update"
 git push origin main
 
 pip install fastapi uvicorn[standard]
