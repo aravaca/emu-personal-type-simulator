@@ -1632,11 +1632,11 @@ function handleObstacleState(st) {
 
         <!-- 속도 / 거리 / 경사 -->
         <label class="form-label"><span id="labelInitSpeed">초기 속도 (km/h)</span>
-          <input id="inputSpeed" type="number" value="60" min="40" max="300" step="5" class="form-input">
+          <input id="inputSpeed" type="number" value="80" min="40" max="300" step="5" class="form-input">
         </label>
 
         <label class="form-label"><span id="labelInitDist">거리 (m)</span>
-          <input id="inputDist" type="number" value="250" min="150" max="6000" step="100" class="form-input">
+          <input id="inputDist" type="number" value="600" min="150" max="6000" step="100" class="form-input">
         </label>
 
         <label class="form-label"><span id="labelGradeInput">경사도 (‰)</span>
@@ -4116,7 +4116,7 @@ class VVVFEngine {
     let targetSubVol = 0;
 
     if (mode === "power") {
-      targetVol = pattern.volMix * 0.1; //원래 0.5
+      targetVol = pattern.volMix * 0.1; //원래 0.5 하지만 운전실 안에서는 0.1처럼 작게 들림
       // targetVol = 0.05
 
       // 1펄스(고속) 영역에서 서브 오실레이터 강화 (웅장한 모터 소리)
