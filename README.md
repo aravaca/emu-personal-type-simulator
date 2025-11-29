@@ -64,21 +64,21 @@ Planned upgrades include integration with advanced railway control frameworks an
 ---
 
 ## ⚙️ Config
-/tasc
-├── __pycache__
+.
+├── __pycache__/
 │   └── server.cpython-312.pyc
-├── scenario.json // Scenario configuration file
-├── server.py // FastAPI backend server
-└── static 
-    ├── E233 // E233 train model real data
-    ├── audio // Audio files
-    ├── emu_db // EMU database files
+├── scenario.json 
+├── server.py
+└── static/
+    ├── E233/
+    ├── audio/
+    ├── emu_db/
     ├── favicon.ico
-    ├── helper // Notch calculator scripts
-    ├── index.html // Main HTML/JS frontend script
-    ├── logos 
-    ├── photos // Panel photos
-    └── textures // Texture files
+    ├── helper/
+    ├── index.html
+    ├── logos/
+    ├── photos/
+    └── textures/
 
 ---
 
