@@ -4346,6 +4346,9 @@ async function initializeBveEngine() {
       // Also load door sound separately (correct path)
       await bveSoundEngine.loadDoorSound("/static/E233/OriginalData/Sound/Door/DoorOpen1.wav");
 
+      // Load notch sound effect
+      await loadNotchSound();
+
       console.log("✓ BVE Sound Engine fully initialized and ready");
       
       // Hide loading screen with fade-out
@@ -4906,6 +4909,54 @@ function formatTimeSec(secInt) {
 }
 
 
+// ===== Notch Sound Effect =====
+let notchSoundFile = null;
+let lastNotchValue = null; // 마지막 노치 값 기록
+async function loadNotchSound() {
+  try {
+    const response = await fetch('/static/audio/notch.mp3', { cache: 'no-store' });
+    if (response.ok) {
+      const buffer = await response.arrayBuffer();
+      notchSoundFile = buffer;
+      console.log("notch.mp3 loaded successfully");
+    }
+  } catch (err) {
+    console.debug("notch.mp3 load error:", err);
+  }
+}
+function playNotchSound() {
+  if (!notchSoundFile || !bveCtx) return;
+  try {
+    // AudioContext 상태 확인 후 resume 필요시 수행
+    if (bveCtx.state === 'suspended') {
+      bveCtx.resume().then(() => {
+        playNotchSoundHelper();
+      });
+    } else {
+      playNotchSoundHelper();
+    }
+  } catch (err) {
+    console.debug("playNotchSound error:", err);
+  }
+}
+function playNotchSoundHelper() {
+  try {
+    bveCtx.decodeAudioData(notchSoundFile.slice(0), (buffer) => {
+      const source = bveCtx.createBufferSource();
+      source.buffer = buffer;
+      const gain = bveCtx.createGain();
+      gain.gain.value = 0.5; // 0~1 범위의 볼륨(조정 가능)
+      source.connect(gain);
+      gain.connect(bveCtx.destination);
+      source.start();
+    }, (err) => {
+      console.debug("notch.mp3 decode error:", err);
+    });
+  } catch (err) {
+    console.debug("playNotchSoundHelper error:", err);
+  }
+}
+
 // ===== WebSocket (단일 핸들러로 교체) =====
 ws.onmessage = (ev) => {
   const msg = JSON.parse(ev.data);
@@ -4914,6 +4965,14 @@ ws.onmessage = (ev) => {
   // 상태 저장
   st = msg.payload;
   window.st = st;
+
+  // 🔔 노치 변경 감지 및 재생
+  if (typeof st.lever_notch === 'number' && lastNotchValue !== st.lever_notch) {
+    if (lastNotchValue !== null) { // 첫 프레임은 재생 안 함
+      playNotchSound();
+    }
+    lastNotchValue = st.lever_notch;
+  }
 // --- 안내방송: 남은거리 crossing 기반 트리거 ---
   try {
     if (typeof st.remaining_m === "number" && !announcementPlayed) {
