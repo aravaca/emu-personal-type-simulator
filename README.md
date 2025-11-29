@@ -64,9 +64,22 @@ Planned upgrades include integration with advanced railway control frameworks an
 ---
 
 ## ⚙️ Config
-- **e233_1000.json**
-  - `notch_accels`: `[EB, B8, B7, ..., B1, N]` order
-  - `tau_cmd_ms`, `tau_brk_ms`: control/brake delay constants
+/tasc
+├── __pycache__
+│   └── server.cpython-312.pyc
+├── scenario.json // Scenario configuration file
+├── server.py // FastAPI backend server
+└── static 
+    ├── E233 // E233 train model real data
+    ├── audio // Audio files
+    ├── emu_db // EMU database files
+    ├── favicon.ico
+    ├── helper // Notch calculator scripts
+    ├── index.html // Main HTML/JS frontend script
+    ├── logos 
+    ├── photos // Cab photos
+    └── textures // Texture files
+
 ---
 
 ## 📄 License

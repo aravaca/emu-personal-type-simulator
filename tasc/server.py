@@ -1428,7 +1428,7 @@ async def ws_endpoint(ws: WebSocket):
     await ws.accept()
     cur_length = 10
     cur_load_rate = 0.70
-    vehicle_json_path = os.path.join(STATIC_DIR, "e233_1000.json")
+    vehicle_json_path = os.path.join(STATIC_DIR, "emu_db/e233_1000.json")
     scenario_json_path = os.path.join(BASE_DIR, "scenario.json")
 
     vehicle = Vehicle.from_json(vehicle_json_path)
@@ -1616,9 +1616,9 @@ async def ws_endpoint(ws: WebSocket):
                         try:
                             # 경로 정규화
                             rel_norm = rel.strip()
-                            if rel_norm.startswith("/static/"): rel_norm = rel_norm[len("/static/"):]
-                            elif rel_norm.startswith("static/"): rel_norm = rel_norm[len("static/"):]
-                            path = os.path.join(STATIC_DIR, rel_norm)
+                            if rel_norm.startswith("/static/emu_db/"): rel_norm = rel_norm[len("/static/emu_db/"):]
+                            elif rel_norm.startswith("static/emu_db/"): rel_norm = rel_norm[len("static/emu_db/"):]
+                            path = os.path.join(STATIC_DIR + "/emu_db", rel_norm)
 
                             if not os.path.isfile(path):
                                 raise FileNotFoundError(path)
