@@ -4017,6 +4017,62 @@ class BveSoundEngine {
   }
 
   /**
+   * Load horn sound (one-shot)
+   */
+  async loadHornSound(hornPath) {
+    try {
+      const response = await fetch(hornPath);
+      const arrayBuffer = await response.arrayBuffer();
+      this.hornBuffer = await new Promise((resolve, reject) => {
+        try {
+          this.ctx.decodeAudioData(arrayBuffer, (buf) => resolve(buf), (err) => reject(err));
+        } catch (err) { reject(err); }
+      });
+      console.log("✓ BVE loaded horn sound");
+    } catch (err) {
+      console.warn("Failed to load horn sound:", err);
+    }
+  }
+
+  /**
+   * Play horn (one-shot). Uses a short playing guard to avoid overlap spam.
+   */
+  playHorn() {
+    if (!this.hornBuffer) return;
+    if (this.hornPlaying) return;
+
+    const doPlay = () => {
+      try {
+        const source = this.ctx.createBufferSource();
+        source.buffer = this.hornBuffer;
+        source.loop = false;
+
+        const gain = this.ctx.createGain();
+        gain.gain.value = 0.9; // Horn volume
+
+        source.connect(gain);
+        gain.connect(this.master);
+        source.start(this.ctx.currentTime);
+
+        // Prevent immediate retriggering while horn plays
+        this.hornPlaying = true;
+        const duration = this.hornBuffer.duration || 0.8;
+        setTimeout(() => { this.hornPlaying = false; }, duration * 1000 + 50);
+
+        console.debug("BVE: Horn played");
+      } catch (err) {
+        console.error("BVE: Error playing horn:", err);
+      }
+    };
+
+    if (this.ctx.state === 'suspended') {
+      this.ctx.resume().then(doPlay).catch(err => console.error('BVE: resume failed', err));
+    } else {
+      doPlay();
+    }
+  }
+
+  /**
    * Get interpolated volume for a WAV at a given speed using the appropriate table.
    */
   getInterpolatedVol(speed, wavName, mode) {
@@ -4346,6 +4402,9 @@ async function initializeBveEngine() {
       // Also load door sound separately (correct path)
       await bveSoundEngine.loadDoorSound("/static/E233/OriginalData/Sound/Door/DoorOpen1.wav");
 
+      // Also load a default horn (HornB) for H key playback
+      await bveSoundEngine.loadHornSound("/static/E233/ExternalData/Sound/Horn/HornB.wav");
+
       // Load notch sound effect
       await loadNotchSound();
 
@@ -4391,6 +4450,26 @@ function computeAnnouncementTriggerDistForCurrentTrain() {
   // 나머지는 500m
   return 500;
 }
+
+// Global keyboard handler: play horn on 'H' press (case-insensitive)
+document.addEventListener('keydown', (ev) => {
+  try {
+    if (!ev || !ev.key) return;
+    if (ev.key.toLowerCase() === 'h') {
+      if (bveSoundEngine && typeof bveSoundEngine.playHorn === 'function') {
+        bveSoundEngine.playHorn();
+      } else {
+        // Fallback: attempt to play directly via HTMLAudio (best-effort)
+        try {
+          const a = new Audio('/static/E233/ExternalData/Sound/Horn/HornB.wav');
+          a.play().catch(() => {});
+        } catch (e) {}
+      }
+      // Prevent other handlers if any
+      ev.preventDefault();
+    }
+  } catch (e) { /* ignore */ }
+});
 
 function playStationMelody() {
   if (!stationMelody) return;

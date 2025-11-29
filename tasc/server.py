@@ -1041,7 +1041,8 @@ class StoppingSim:
             self._apply_command(self._cmd_queue.popleft())
         
         # if self.notch_history[-1] != st.lever_notch:
-        self.notch_history.append(st.lever_notch)
+        if st.v > 0.1:
+            self.notch_history.append(st.lever_notch)
 
         self.time_history.append(st.t)
         # --- 기존 first_brake_done 로직 삭제하고 아래로 교체 ---
@@ -1186,7 +1187,7 @@ class StoppingSim:
 
         # ---------- Finish ----------
         rem = self.scn.L - st.s
-        if not st.finished and (rem <= -5.0 or (rem <= 1.0 and st.v <= 0.0)):
+        if not st.finished and (rem <= -5.0 or (rem <= 1.0 and st.v <= 0.0 and st.lever_notch >= 5)):
             st.finished = True
             st.stop_error_m = self.scn.L - st.s
             st.residual_speed_kmh = st.v * 3.6
