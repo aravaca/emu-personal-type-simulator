@@ -4965,7 +4965,7 @@ ws.onmessage = (ev) => {
       // Play door sound when train arrives (prefer st.finished or speed==0 and remaining distance ≤ 1m)
       try {
         const rem = (typeof st.remaining_m === 'number') ? st.remaining_m : null;
-        const isStopped = speedKmh <= 0.1 || st.v === 0;
+        const isStopped = speedKmh <= 0 || st.v === 0;
         if ((st.finished && isStopped && rem !== null && Math.abs(rem) <= 1) && bveSoundEngine) {
           const timeSinceLastDoor = (typeof st.time === 'number' ? st.time : 0) - (bveSoundEngine.lastDoorTrigger || -9999);
           if (timeSinceLastDoor > 2) { // debounce

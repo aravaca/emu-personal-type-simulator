@@ -534,16 +534,6 @@ class StoppingSim:
         return -F / self.veh.mass_kg if v != 0 else 0.0
 
     # ----------------- 기타 헬퍼 -----------------
-    def _taus_for_speed(self, v: float, is_eb: bool):
-        v_kmh = v * 3.6
-        if is_eb:
-            return 0.15, 0.45
-        if v_kmh >= 15.0:
-            return 0.18, 0.40
-        elif v_kmh >= 10.0:
-            return 0.30, 0.60
-        else:
-            return 0.55, 0.80
 
     def _blend_w_regen(self, v: float) -> float:
         v_kmh = v * 3.6
@@ -784,27 +774,60 @@ class StoppingSim:
             return a_pwr
 
         # ------------------------
-        # 2) 물리 파라미터 없으면 기존 방식 유지
+        # 2) 물리 파라미터 없으면 기존 방식 유지 여기서 단 조절!!!
         # ------------------------
+        # Legacy fallback: per-notch base accel with realistic fade-by-speed
         n_notches = len(self.veh.forward_notch_accels)
         idx = max(0, min(-lever_notch - 1, n_notches - 1))
-        base_accel = self.veh.forward_notch_accels[idx]
+        base_accel = float(self.veh.forward_notch_accels[idx])
 
-        v_max_total = max(1e-6, self.veh.maxSpeed_kmh / 3.6)
-        if idx < 1:
-            v_cap = (v_max_total * (idx + 1) / n_notches) + (10 / 3.6)
-        else:
-            v_cap = (v_max_total * (idx + 1) / n_notches)
+        # Work in km/h for intuitive thresholds
+        v_kmh = v * 3.6
+        max_v_kmh = max(1.0, float(self.veh.maxSpeed_kmh))
 
-        fade_start = 0.1 * v_cap
+        # Per-notch fade start/end speeds (km/h).
+        # These are simple, realistic defaults for EMU commuter trains (adjustable):
+        # P1: effective at very low speeds, fades out by ~15 km/h
+        # P2: effective up to ~40 km/h
+        # P3: effective up to ~70 km/h
+        # P4: effective up to ~100 km/h
+        # P5: remains effective to top speed
+        # If vehicle has different number of forward notches, scale these values.
+        default_starts = [0.0, 5.0, 20.0, 40.0, 70.0]
+        default_ends   = [15.0, 40.0, 70.0, 100.0, max_v_kmh]
+
+        # Build per-notch start/end arrays matching n_notches
+        starts = []
+        ends = []
+        for i in range(n_notches):
+            if i < len(default_starts):
+                s = default_starts[i]
+                e = default_ends[i]
+            else:
+                # scale remaining notches linearly up to max_v_kmh
+                frac = float(i) / max(1, (n_notches - 1))
+                s = frac * max_v_kmh * 0.2
+                e = max_v_kmh * (0.2 + 0.8 * frac)
+            # clamp to vehicle max
+            s = min(max_v_kmh, s)
+            e = min(max_v_kmh, max(s + 1.0, e))
+            starts.append(s)
+            ends.append(e)
+
+        # Minimum gain when fully faded
         min_factor = 0.05
 
-        if v <= fade_start:
+        # If below start -> full notch effect; if above end -> faded to min_factor
+        s_k = starts[idx]
+        e_k = ends[idx]
+        if v_kmh <= s_k:
             factor = 1.0
+        elif v_kmh >= e_k:
+            factor = min_factor
         else:
-            x = (v - fade_start) / (v_cap - fade_start)
+            x = (v_kmh - s_k) / (e_k - s_k)
             factor = 1.0 - (1.0 - min_factor) * x
-            factor = max(factor, min_factor)
+            factor = max(min_factor, min(1.0, factor))
 
         return base_accel * factor
 

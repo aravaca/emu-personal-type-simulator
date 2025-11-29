@@ -1,5 +1,5 @@
 git add .
-git commit -m "sound linger fix"
+git commit -m "accel fix"
 git push origin main
 
 pip install fastapi uvicorn[standard]
