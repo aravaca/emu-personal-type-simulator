@@ -1039,6 +1039,61 @@ body {
   </style>
 </head>
 <body>
+<!-- === BVE SOUND ENGINE LOADING SCREEN === -->
+<div id="bveLoadingScreen" style="
+  position: fixed;
+  inset: 0;
+  background: linear-gradient(135deg, #0f1419 0%, #1a1f2e 100%);
+  display: none; /* hidden until Start is pressed */
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  z-index: 99999;
+  font-family: 'Segoe UI', system-ui, sans-serif;
+">
+  <div style="text-align: center;">
+    <div style="margin-bottom: 30px;">
+      <div style="font-size: 32px; font-weight: 300; color: #60a5fa; margin-bottom: 8px; letter-spacing: 1px;">
+        🚄 Preparing your EMU...
+      </div>
+      <div style="font-size: 13px; color: #94a3b8; letter-spacing: 0.5px;">
+        <span id="bveLoadStatus">Initializing audio context...</span>
+      </div>
+    </div>
+    
+    <div style="
+      width: 240px;
+      height: 4px;
+      background: rgba(255,255,255,0.1);
+      border-radius: 2px;
+      overflow: hidden;
+      margin: 0 auto 20px auto;   /* <-- centers it */
+    ">
+      <div id="bveLoadBar" style="
+        height: 100%;
+        width: 0%;
+        background: linear-gradient(90deg, #3b82f6, #60a5fa, #3b82f6);
+        background-size: 200% 100%;
+        animation: shimmer 2s infinite;
+        border-radius: 2px;
+        transition: width 0.3s ease-out;
+      "></div>
+    </div>
+
+    
+    <div style="font-size: 12px; color: #64748b; margin-top: 15px;">
+      <span id="bveLoadPercent">0</span>% complete
+    </div>
+  </div>
+</div>
+
+<style>
+@keyframes shimmer {
+  0% { background-position: 200% 0; }
+  100% { background-position: -200% 0; }
+}
+</style>
+
 <canvas id="ribbonBig" style="position:fixed; right:0; top:0; bottom:0; width:27px; height:100vh; pointer-events:none; z-index:10002; display:flex; align-items:right; justify-content:center;"></canvas>
 <!-- BEGIN PATCH: Cab 3D Card -->
 <style>
@@ -3712,7 +3767,7 @@ class BveSoundEngine {
   constructor(ctx) {
     this.ctx = ctx;
     this.master = ctx.createGain();
-    this.master.gain.value = 1.0; // Master volume
+    this.master.gain.value = 4.0; // Master volume
     this.master.connect(ctx.destination);
 
     // CSV tables: { speed -> { wavName -> value } }
@@ -3727,10 +3782,21 @@ class BveSoundEngine {
     // Currently playing sources: { wavName -> { source, gain, isPlaying, targetVol, targetFreq } }
     this.activeSources = {};
 
+    // Ghost sources (fading out from previous mode): array of { source, gain, fadeOutEnd }
+    this.ghostSources = [];
+
     // State
     this.currentSpeed = 0;
     this.lastMode = "coast"; // "power", "brake", "coast"
     this.lastDebugLog = 0; // For rate-limiting debug output
+    this.modeFadeOutTime = 0.2; // Fade time when switching modes
+    this.modeFadeInTime = 0.3; // Fade time when switching modes
+    this.overlapDuration = 1.2; // Duration to overlap old and new mode audio (in seconds)
+    
+    // Door sound state
+    this.doorBuffer = null;
+    this.doorPlaying = false;
+    this.lastDoorTrigger = -10; // Last time door was played (in seconds)
   }
 
   /**
@@ -3830,6 +3896,9 @@ class BveSoundEngine {
    */
   async loadCsvTables(powerVolPath, powerFreqPath, brakeVolPath, brakeFreqPath) {
     try {
+      // Update loading screen
+      this.updateLoadingUI("Loading motor tables...", 15);
+      
       const [powerVolText, powerFreqText, brakeVolText, brakeFreqText] = await Promise.all([
         fetch(powerVolPath).then(r => r.text()),
         fetch(powerFreqPath).then(r => r.text()),
@@ -3842,10 +3911,25 @@ class BveSoundEngine {
       this.brakeVolTable = this.parseCSV(brakeVolText);
       this.brakeFreqTable = this.parseCSV(brakeFreqText);
 
+      this.updateLoadingUI("Motor tables loaded", 35);
       console.log("BVE CSV tables loaded successfully");
     } catch (err) {
       console.error("Failed to load BVE CSV tables:", err);
+      throw err;
     }
+  }
+
+  /**
+   * Update loading screen UI
+   */
+  updateLoadingUI(status, percent) {
+    const statusEl = document.getElementById('bveLoadStatus');
+    const barEl = document.getElementById('bveLoadBar');
+    const percentEl = document.getElementById('bveLoadPercent');
+    
+    if (statusEl) statusEl.textContent = status;
+    if (barEl) barEl.style.width = percent + '%';
+    if (percentEl) percentEl.textContent = percent;
   }
 
   /**
@@ -3853,20 +3937,82 @@ class BveSoundEngine {
    */
   async loadWavBuffers(motorDirPath, wavFileNames) {
     try {
-      const promises = wavFileNames.map(name =>
+      const promises = wavFileNames.map((name, idx) =>
         fetch(`${motorDirPath}/${name}`)
           .then(r => r.arrayBuffer())
           .then(buf => this.ctx.decodeAudioData(buf))
           .then(decoded => {
             this.wavBuffers[name.replace('.wav', '')] = decoded;
+            // Update loading screen for each loaded WAV
+            const progress = 35 + Math.floor((idx + 1) / wavFileNames.length * 55);
+            this.updateLoadingUI(`Loading audio (${idx + 1}/${wavFileNames.length})`, progress);
           })
           .catch(err => console.warn(`Failed to load ${name}:`, err))
       );
 
       await Promise.all(promises);
+      this.updateLoadingUI("Audio ready!", 90);
       console.log(`BVE loaded ${Object.keys(this.wavBuffers).length} WAV buffers`);
     } catch (err) {
       console.error("Failed to load BVE WAV files:", err);
+      throw err;
+    }
+  }
+
+  /**
+   * Load door open sound
+   */
+  async loadDoorSound(doorPath) {
+    try {
+      const response = await fetch(doorPath);
+      const arrayBuffer = await response.arrayBuffer();
+      // decodeAudioData used with Promise-style wrapper for better compatibility
+      this.doorBuffer = await new Promise((resolve, reject) => {
+        try {
+          this.ctx.decodeAudioData(arrayBuffer, (buf) => resolve(buf), (err) => reject(err));
+        } catch (err) { reject(err); }
+      });
+      console.log("✓ BVE loaded door sound");
+    } catch (err) {
+      console.warn("Failed to load door sound:", err);
+    }
+  }
+
+  /**
+   * Play door sound (one-shot, not looped)
+   */
+  playDoorSound() {
+    if (!this.doorBuffer || this.doorPlaying) return;
+
+    const doPlay = () => {
+      try {
+        const source = this.ctx.createBufferSource();
+        source.buffer = this.doorBuffer;
+        source.loop = false;
+
+        const gain = this.ctx.createGain();
+        gain.gain.value = 0.7; // Door sound volume
+
+        source.connect(gain);
+        gain.connect(this.master);
+        source.start(this.ctx.currentTime);
+
+        // Mark as playing and set timeout to reset flag
+        this.doorPlaying = true;
+        const duration = this.doorBuffer.duration || 1.0;
+        setTimeout(() => { this.doorPlaying = false; }, duration * 1000 + 100);
+
+        console.debug("BVE: Door sound played");
+      } catch (err) {
+        console.error("BVE: Error playing door sound:", err);
+      }
+    };
+
+    // Ensure AudioContext resumed (browser policies)
+    if (this.ctx.state === 'suspended') {
+      this.ctx.resume().then(doPlay).catch(err => console.error('BVE: resume failed', err));
+    } else {
+      doPlay();
     }
   }
 
@@ -3925,7 +4071,7 @@ class BveSoundEngine {
   /**
    * Ensure a WAV is playing and update its properties.
    */
-  ensurePlaying(wavName, speed, mode, fadeInTime = 0.3) {
+  ensurePlaying(wavName, speed, mode, fadeInTime = null) {
     const buffer = this.wavBuffers[wavName];
     if (!buffer) {
       console.debug(`BVE: WAV buffer not found: ${wavName}`);
@@ -3934,6 +4080,11 @@ class BveSoundEngine {
 
     const vol = this.getInterpolatedVol(speed, wavName, mode);
     const freq = this.getInterpolatedFreq(speed, wavName, mode);
+
+    // Use mode-specific fade time if available
+    if (fadeInTime === null) {
+      fadeInTime = this.modeFadeInTime || 0.3;
+    }
 
     // Debug: Log volume and frequency for diagnostics (sample rate limit to avoid spam)
     const now = Date.now();
@@ -3944,7 +4095,7 @@ class BveSoundEngine {
 
     if (vol <= 0) {
       // Stop if vol is 0
-      this.stopWav(wavName, 0.2);
+      this.stopWav(wavName, this.modeFadeOutTime || 0.2);
       return;
     }
 
@@ -3971,10 +4122,30 @@ class BveSoundEngine {
         console.error(`BVE: Error starting ${wavName}:`, err);
       }
     } else {
-      // Update existing source
+      // Update existing source - use linear ramps for smoother transitions
       const { source, gain } = this.activeSources[wavName];
-      gain.gain.setTargetAtTime(Math.min(1, vol), t, 0.05); // Smooth transition
-      source.playbackRate.setTargetAtTime(Math.max(0.5, Math.min(2.0, freq)), t, 0.05); // Smooth freq change
+      try {
+        const g = gain.gain;
+        g.cancelScheduledValues(t);
+        const current = g.value || 0;
+        g.setValueAtTime(current, t);
+        const rampTo = Math.min(1, vol);
+        const rampDur = Math.max(0.05, (this.modeFadeInTime || 0.3));
+        g.linearRampToValueAtTime(rampTo, t + rampDur);
+      } catch (e) {
+        try { gain.gain.setTargetAtTime(Math.min(1, vol), t, 0.05); } catch(e){}
+      }
+
+      try {
+        const pr = source.playbackRate;
+        pr.cancelScheduledValues(t);
+        const curp = pr.value || 1.0;
+        pr.setValueAtTime(curp, t);
+        pr.linearRampToValueAtTime(Math.max(0.5, Math.min(2.0, freq)), t + Math.max(0.05, (this.modeFadeInTime || 0.3)));
+      } catch (e) {
+        try { source.playbackRate.setTargetAtTime(Math.max(0.5, Math.min(2.0, freq)), t, 0.05); } catch(e){}
+      }
+
       this.activeSources[wavName].targetVol = vol;
       this.activeSources[wavName].targetFreq = freq;
     }
@@ -3988,7 +4159,16 @@ class BveSoundEngine {
     const { source, gain } = this.activeSources[wavName];
     const t = this.ctx.currentTime;
 
-    gain.gain.setTargetAtTime(0, t, fadeOutTime / 5);
+    try {
+      const g = gain.gain;
+      g.cancelScheduledValues(t);
+      const current = g.value || 0;
+      g.setValueAtTime(current, t);
+      g.linearRampToValueAtTime(0, t + fadeOutTime);
+    } catch (e) {
+      try { gain.gain.setTargetAtTime(0, t, fadeOutTime / 5); } catch(e){}
+    }
+
     setTimeout(() => {
       try {
         source.stop();
@@ -3996,7 +4176,22 @@ class BveSoundEngine {
         // Already stopped
       }
       delete this.activeSources[wavName];
-    }, fadeOutTime * 1000);
+    }, Math.max(50, fadeOutTime * 1000 + 50));
+  }
+
+  /**
+   * Manage ghost sources (previous mode sources fading out).
+   * Clean up finished ghosts and update remaining ones.
+   */
+  cleanupGhostSources() {
+    const now = this.ctx.currentTime;
+    this.ghostSources = this.ghostSources.filter(ghost => {
+      if (now >= ghost.fadeOutEnd) {
+        try { ghost.source.stop(); } catch (e) {}
+        return false; // Remove from ghost list
+      }
+      return true; // Keep in ghost list
+    });
   }
 
   /**
@@ -4005,6 +4200,9 @@ class BveSoundEngine {
    */
   update(currentSpeed, powerNotch, maxPowerNotch, brakeNotch, maxBrakeNotch, isEB) {
     this.currentSpeed = currentSpeed;
+
+    // Clean up old ghost sources
+    this.cleanupGhostSources();
 
     // Skip update if speed is too low
     if (currentSpeed < 0.5) {
@@ -4020,6 +4218,32 @@ class BveSoundEngine {
     if (isEB) mode = "brake";
     else if (powerNotch > 0) mode = "power";
     else if (brakeNotch > 0) mode = "brake";
+
+    // Detect mode change for crossfading
+    const modeChanged = mode !== this.lastMode;
+    if (modeChanged) {
+      // Crossfade: move current active sources to ghost list (fade out over overlapDuration)
+      const now = this.ctx.currentTime;
+      const fadeOutEnd = now + this.overlapDuration;
+      
+      for (const wavName in this.activeSources) {
+        const { source, gain } = this.activeSources[wavName];
+        try {
+          const g = gain.gain;
+          g.cancelScheduledValues(now);
+          const current = g.value || 0;
+          g.setValueAtTime(current, now);
+          g.linearRampToValueAtTime(0, fadeOutEnd);
+        } catch (e) {
+          try { gain.gain.setTargetAtTime(0, now, this.overlapDuration / 5); } catch(e){}
+        }
+        
+        this.ghostSources.push({ source, gain, fadeOutEnd });
+      }
+      
+      // Clear active sources (new ones will be created for new mode)
+      this.activeSources = {};
+    }
 
     // Get appropriate CSV tables
     const volTable = mode === "brake" ? this.brakeVolTable : this.powerVolTable;
@@ -4039,7 +4263,7 @@ class BveSoundEngine {
     }
 
     // Debug: Log what we found (once per mode change)
-    if (mode !== this.lastMode && allWavNames.size === 0) {
+    if (modeChanged && allWavNames.size === 0) {
       console.warn("BVE: No WAV names found in vol table for mode", mode, "Available speeds:", Object.keys(volTable).slice(0, 5));
     }
 
@@ -4049,15 +4273,20 @@ class BveSoundEngine {
       if (vol > 0.01) {  // Use small threshold instead of 0
         this.ensurePlaying(wavName, currentSpeed, mode);
       } else {
-        this.stopWav(wavName);
+        // Use mode-specific fade time
+        this.stopWav(wavName, this.modeFadeOutTime);
       }
     }
 
     // Stop any WAVs that shouldn't be playing in this mode
-    for (const wavName in this.activeSources) {
-      if (!allWavNames.has(wavName)) {
-        this.stopWav(wavName);
+    try {
+      for (const wavName in this.activeSources) {
+        if (!allWavNames.has(wavName)) {
+          this.stopWav(wavName, this.modeFadeOutTime);
+        }
       }
+    } catch (e) {
+      // ignore timing errors
     }
 
     this.lastMode = mode;
@@ -4114,9 +4343,29 @@ async function initializeBveEngine() {
         wavFileNames
       );
 
+      // Also load door sound separately (correct path)
+      await bveSoundEngine.loadDoorSound("/static/E233/OriginalData/Sound/Door/DoorOpen1.wav");
+
       console.log("✓ BVE Sound Engine fully initialized and ready");
+      
+      // Hide loading screen with fade-out
+      const loadingScreen = document.getElementById('bveLoadingScreen');
+      if (loadingScreen) {
+        bveSoundEngine.updateLoadingUI("Ready!", 100);
+        setTimeout(() => {
+          loadingScreen.style.transition = 'opacity 0.6s ease-out';
+          loadingScreen.style.opacity = '0';
+          setTimeout(() => {
+            loadingScreen.style.display = 'none';
+          }, 600);
+        }, 500);
+      }
     } catch (err) {
       console.error("BVE initialization error:", err);
+      const loadingScreen = document.getElementById('bveLoadingScreen');
+      if (loadingScreen) {
+        bveSoundEngine.updateLoadingUI("Error loading sound engine", 0);
+      }
     }
   }
 
@@ -4455,9 +4704,33 @@ if (fb) {
 }
 
 /* ===== 시작/재시작 ===== */
-function startRun(){
-  // 오디오 정책 해제 & BVE 준비
-  initializeBveEngine().catch(err => console.debug("BVE init error:", err));
+async function startRun(){
+  // Determine whether audio is already loaded. If so, skip loading screen.
+  const alreadyLoaded = (typeof bveSoundEngine === 'object' && bveSoundEngine && Object.keys(bveSoundEngine.wavBuffers || {}).length > 0);
+
+  // Hide the main overlay immediately so game UI is visible while loading or starting
+  try { const overlay = document.getElementById('overlay'); if (overlay && !overlay.classList.contains('hide')) overlay.classList.add('hide'); } catch(e) {}
+
+  if (!alreadyLoaded) {
+    // Show loading screen when user starts (only if audio not yet loaded)
+    try {
+      const loading = document.getElementById('bveLoadingScreen');
+      const statusEl = document.getElementById('bveLoadStatus');
+      const percentEl = document.getElementById('bveLoadPercent');
+      if (loading) {
+        loading.style.display = 'flex';
+        loading.style.opacity = '1';
+      }
+      if (statusEl) statusEl.textContent = 'Preparing...';
+      if (percentEl) percentEl.textContent = '0';
+    } catch (e) {}
+
+    // 오디오 정책 해제 & BVE 준비
+    await initializeBveEngine().catch(err => console.debug("BVE init error:", err));
+  } else {
+    // If audio already loaded, ensure AudioContext resumed and skip showing loading screen
+    try { if (bveCtx && bveCtx.state === 'suspended') await bveCtx.resume(); } catch (e) { console.debug('BVE: resume error', e); }
+  }
 
   //  새 런 시작할 때 장애물 플래그 리셋
   hazardInfo.active = false;
@@ -4688,6 +4961,19 @@ ws.onmessage = (ev) => {
       const isEB = (rawNotch === maxBrakeIdx);
 
       bveSoundEngine.update(speedKmh, powerNotch, maxPowerNotch, brakeNotch, maxBrakeIdx, isEB);
+
+      // Play door sound when train arrives (prefer st.finished or speed==0 and remaining distance ≤ 1m)
+      try {
+        const rem = (typeof st.remaining_m === 'number') ? st.remaining_m : null;
+        const isStopped = speedKmh <= 0.1 || st.v === 0;
+        if ((st.finished && isStopped && rem !== null && Math.abs(rem) <= 1) && bveSoundEngine) {
+          const timeSinceLastDoor = (typeof st.time === 'number' ? st.time : 0) - (bveSoundEngine.lastDoorTrigger || -9999);
+          if (timeSinceLastDoor > 2) { // debounce
+            bveSoundEngine.playDoorSound();
+            bveSoundEngine.lastDoorTrigger = (typeof st.time === 'number') ? st.time : Date.now() / 1000;
+          }
+        }
+      } catch (e) {}
     }
   } catch (e) {
     console.debug("BVE sound update error", e);
