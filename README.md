@@ -77,7 +77,7 @@ Planned upgrades include integration with advanced railway control frameworks an
     ├── helper // Notch calculator scripts
     ├── index.html // Main HTML/JS frontend script
     ├── logos 
-    ├── photos // Cab photos
+    ├── photos // Panel photos
     └── textures // Texture files
 
 ---
