@@ -3914,6 +3914,7 @@ class BveSoundEngine {
     
     // Door sound state
     this.doorBuffer = null;
+    this.doorCloseBuffer = null;
     this.doorPlaying = false;
     this.lastDoorTrigger = -10; // Last time door was played (in seconds)
   }
@@ -4124,6 +4125,62 @@ class BveSoundEngine {
         console.debug("BVE: Door sound played");
       } catch (err) {
         console.error("BVE: Error playing door sound:", err);
+      }
+    };
+
+    // Ensure AudioContext resumed (browser policies)
+    if (this.ctx.state === 'suspended') {
+      this.ctx.resume().then(doPlay).catch(err => console.error('BVE: resume failed', err));
+    } else {
+      doPlay();
+    }
+  }
+
+  /**
+   * Load door close sound (one-shot)
+   */
+  async loadDoorCloseSound(doorClosePath) {
+    try {
+      const response = await fetch(doorClosePath);
+      const arrayBuffer = await response.arrayBuffer();
+      this.doorCloseBuffer = await new Promise((resolve, reject) => {
+        try {
+          this.ctx.decodeAudioData(arrayBuffer, (buf) => resolve(buf), (err) => reject(err));
+        } catch (err) { reject(err); }
+      });
+      console.log("✓ BVE loaded door close sound");
+    } catch (err) {
+      console.warn("Failed to load door close sound:", err);
+    }
+  }
+
+  /**
+   * Play door close sound (one-shot, not looped)
+   */
+  playDoorClose() {
+    if (!this.doorCloseBuffer || this.doorPlaying) return;
+
+    const doPlay = () => {
+      try {
+        const source = this.ctx.createBufferSource();
+        source.buffer = this.doorCloseBuffer;
+        source.loop = false;
+
+        const gain = this.ctx.createGain();
+        gain.gain.value = 0.7; // Door sound volume
+
+        source.connect(gain);
+        gain.connect(this.master);
+        source.start(this.ctx.currentTime);
+
+        // Mark as playing and set timeout to reset flag
+        this.doorPlaying = true;
+        const duration = this.doorCloseBuffer.duration || 1.0;
+        setTimeout(() => { this.doorPlaying = false; }, duration * 1000 + 100);
+
+        console.debug("BVE: Door close sound played");
+      } catch (err) {
+        console.error("BVE: Error playing door close sound:", err);
       }
     };
 
@@ -4520,6 +4577,9 @@ async function initializeBveEngine() {
 
       // Also load door sound separately (correct path)
       await bveSoundEngine.loadDoorSound("/static/E233/OriginalData/Sound/Door/DoorOpen1.wav");
+      
+      // Also load door close sound
+      await bveSoundEngine.loadDoorCloseSound("/static/E233/OriginalData/Sound/Door/DoorClose1.wav");
 
       // Also load a default horn (HornB) for H key playback
       await bveSoundEngine.loadHornSound("/static/E233/ExternalData/Sound/Horn/HornB.wav");
@@ -4862,9 +4922,8 @@ function randomizeInputs(){
   const v = randInt(70, 110);
   inputSpeed.value = String(v);
 
-  // 2) 거리: 속도별 최소거리 규칙 준수 (기존 함수 재사용)
-  const minD = Math.max(650, minDistForSpeed(v));
-  const d = randInt(minD, 750);
+  // 2) 거리: 1000~2000m 범위로 랜덤
+  const d = randInt(1000, 2000);
   inputDist.value = String(d);
 
   // 3) 구배(‰)
@@ -4903,6 +4962,57 @@ if (fb) {
       fb.dataset.lastUpdate = Date.now(); // 업데이트 시간 갱신
     }
   }, 5000);
+}
+
+// Advance to next station without resetting the whole scene (client side)
+window.continueToNextStation = function() {
+  try {
+    // Close the overlay and any popups
+    hideScoreOverlay();
+    hideObstaclePopups();
+
+    // Play door close once (best-effort). Prefer bveSoundEngine if available.
+    try {
+      if (bveSoundEngine && typeof bveSoundEngine.playDoorClose === 'function') {
+        bveSoundEngine.playDoorClose();
+      } else if (bveSoundEngine && typeof bveSoundEngine.playDoorSound === 'function') {
+        bveSoundEngine.playDoorSound();
+      } else {
+        const doorAudio = new Audio('/static/E233/OriginalData/Sound/Door/DoorClose1.wav');
+        doorAudio.play().catch(()=>{});
+      }
+    } catch (e) {
+      try { const doorAudio = new Audio('/static/E233/OriginalData/Sound/Door/DoorClose1.wav'); doorAudio.play().catch(()=>{}); } catch(e){}
+    }
+
+    // If Random Scenario is enabled, randomize inputs (reuse existing logic)
+    const rndEl = document.getElementById('rndToggle');
+    if (rndEl && rndEl.checked) {
+      randomizeInputs();
+    }
+
+    // Prepare parameters and send advanceStation command to server
+    const dist = Number(inputDist.value) || 600;
+    const grade = Number(inputGrade.value) || 0.0;
+    const mu = muFromWeather(weatherSelect.value);
+
+    if (ws.readyState === WebSocket.OPEN) {
+      ws.send(JSON.stringify({ type: 'cmd', payload: { name: 'advanceStation', dist: dist, grade: grade, mu: mu } }));
+    }
+
+    // Hide overlay and mark that we're no longer showing results
+    try { overlay.classList.add('hide'); } catch (e) {}
+    overlayShowingResult = false;
+
+    // Clear any emergency obstacle state for new run
+    try { clearEmergencyObstacle(); } catch (e) {}
+
+    // Give a small feedback message
+    if (fb) fb.innerHTML = `<div class="ok">다음 역으로 진행합니다 — 문 닫힘</div>`;
+    setTimeout(()=>{ if (fb) fb.textContent = "Space로 시작. W/S로 브레이크 조절하세요."; }, 2000);
+  } catch (e) {
+    console.debug('continueToNextStation error', e);
+  }
 }
 
 }
@@ -4987,8 +5097,10 @@ async function startRun(){
 
   if(ws.readyState===WebSocket.OPEN){
 const enabled = document.getElementById("tascToggle").checked;
+const rndEl = document.getElementById('rndToggle');
+const random_mode = !!(rndEl && rndEl.checked);
     ws.send(JSON.stringify({ type:"cmd", payload:{ name:"toggleTimer", enabled:true }}));
-    ws.send(JSON.stringify({type:"cmd",payload:{name:"setInitial",speed,dist,grade,mu}}));
+    ws.send(JSON.stringify({type:"cmd",payload:{name:"setInitial",speed,dist,grade,mu,random_mode}}));
     ws.send(JSON.stringify({type:"cmd",payload:{name:"start"}}));
   }
   overlay.classList.add("hide"); isFinished=false; overlayShowingResult=false;
@@ -5049,15 +5161,31 @@ addEventListener("keydown", (e) => {
   if(e.repeat) return;
 
   if (e.key === " ") {
-    hideScoreOverlay();
-    // 🔁 팝업이 떠있으면 먼저 닫기만 하고, 게임은 재시작하지 않음
-    if (anyObstaclePopupVisible()) {
-      hideObstaclePopups();
-      return;
-    }
-
+    // Check state before taking action
     if (ws.readyState !== WebSocket.OPEN) return;
-    startRun();
+
+    const rndEl = document.getElementById('rndToggle');
+    const atFinished = !!(st && st.finished);
+    const isRandomMode = !!(rndEl && rndEl.checked);
+
+    // If in Random mode and game finished: advance to next station
+    if (isRandomMode && atFinished) {
+      // Advance seamlessly to next station
+      if (window && typeof window.continueToNextStation === 'function') {
+        window.continueToNextStation();
+      }
+    } else {
+      // Default behavior: start new run (hides score overlay if shown)
+      hideScoreOverlay();
+      
+      // If any obstacle popup is visible, just close it
+      if (anyObstaclePopupVisible()) {
+        hideObstaclePopups();
+        return;
+      }
+      
+      startRun();
+    }
   }
   else if(e.key === "w" || e.key === "W"){ 
     sendCmd("applyNotch", +1); 
@@ -5327,21 +5455,33 @@ ws.onmessage = (ev) => {
     console.debug("BVE sound update error", e);
   }
 
-    //  게임 종료 시점 감지 → 점수 오버레이
+    //  게임 종료 시점 감지 → 점수 오버레이 + 도어 열기 소리
   const nowFinished = !!st.finished;
   if (nowFinished && !lastFinishedFlag) {
+    // Always show score overlay when game finishes (in both random and normal mode)
     let score = Number(st.score ?? 0);
-    const veh_name = vehicle.name.toLowerCase()
-    if (veh_name.includes("ktx") || veh_name.includes("n700s") || veh_name.includes("e26")) {
-      if (score > 0) {
-        score +=40; //고속열차 및 전기기관차는 완벽한 기본제동이 사실상 불가하므로 기본제동 점수 어드밴티지 부여
-        if (score >100) {
-          score = 100;
+    if (vehicle && vehicle.name) {
+      const veh_name = vehicle.name.toLowerCase()
+      if (veh_name.includes("ktx") || veh_name.includes("n700s") || veh_name.includes("e26")) {
+        if (score > 0) {
+          score +=40; //고속열차 및 전기기관차는 완벽한 기본제동이 사실상 불가하므로 기본제동 점수 어드밴티지 부여
+          if (score >100) {
+            score = 100;
+          }
         }
       }
     }
     const stopErr = Number(st.stop_error_m ?? 0);
     showScoreOverlay(score, stopErr);
+    
+    // Play doors open sound when game finishes
+    try {
+      if (bveSoundEngine && typeof bveSoundEngine.playDoorSound === 'function') {
+        bveSoundEngine.playDoorSound(); // This is "doors opening" sound
+      }
+    } catch (e) {
+      console.debug("Door sound play error on finish:", e);
+    }
   }
   // 게임이 재시작될 때 도어음 트리거 리셋 (finished: true → false)
   if (!nowFinished && lastFinishedFlag && bveSoundEngine) {

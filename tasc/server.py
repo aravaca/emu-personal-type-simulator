@@ -202,6 +202,7 @@ class StoppingSim:
         self.scn = scn
         self.state = State(t=0.0, s=0.0, v=scn.v0, a=0.0, lever_notch=0, finished=False)
         self.running = False
+        self.random_mode = False  # Flag to control game-over behavior in Random Scenario mode
         self.vref = build_vref(scn.L, 0.8 * veh.a_max)
         self._cmd_queue = deque()
 
@@ -284,7 +285,7 @@ class StoppingSim:
         self.timer_use_table = False
         self.timer_table = {}             # 예: {60:35, 70:30, 80:26}
         self.timer_v_target_kmh = 70.0    # 공식 기반 목표 속도(km/h)
-        self.timer_buffer_s = 0.0         # 여유초
+        self.timer_buffer_s = 80.0        # 여유초 (increased by ~20s)
 
         # ---------- 타이머 자동 산출(보정 데이터 기반) ----------
         # 보정 데이터: [{"v":60, "L":200, "t":23}, ...]  (km/h, m, sec)
@@ -616,6 +617,29 @@ class StoppingSim:
             return
 
         # Normal commands respect command latency
+        # However, when the train is essentially stopped, apply manual
+        # notch changes immediately so the player can depart without
+        # waiting for the command latency to elapse (fixes frozen-input
+        # feel after soft-reset/advanceStation).
+        try:
+            st = self.state
+            speed_m_s = float(getattr(st, 'v', 0.0))
+        except Exception:
+            speed_m_s = 0.0
+
+        immediate_apply = False
+        if name in ("stepNotch", "applyNotch", "setNotch", "release"):
+            # if stopped (or almost stopped) -> immediate
+            if speed_m_s <= 0.05:
+                immediate_apply = True
+
+        if immediate_apply:
+            # apply immediately but DO NOT queue a duplicate entry
+            # to avoid double-applying the command (fixes double-notch bug)
+            cmd = {"t": self.state.t, "name": name, "val": val}
+            self._apply_command(cmd)
+            return
+
         self._cmd_queue.append({"t": self.state.t + self.veh.tau_cmd, "name": name, "val": val})
 
     def _apply_command(self, cmd: dict):
@@ -646,13 +670,31 @@ class StoppingSim:
         elif name == "setNotch":
             st.lever_notch = self._clamp_notch(val)
 
+        # When a forward notch is applied while stopped, compute and apply the proper
+        # acceleration immediately so the filter is initialized correctly for smooth
+        # acceleration from rest.
+        try:
+            if st.lever_notch < 0 and st.v == 0.0:
+                # Compute what the power accel should be at v=0
+                pwr = self.compute_power_accel(st.lever_notch, 0.0)
+                # Initialize the filter to this value so acceleration starts smoothly
+                if pwr > 0:
+                    self._a_cmd_filt = pwr
+                    if DEBUG:
+                        print(f"[APPLY_CMD] Forward notch at v=0: initialized _a_cmd_filt={self._a_cmd_filt:.3f} m/s² (notch={st.lever_notch})")
+        except Exception as e:
+            if DEBUG:
+                print(f"[APPLY_CMD] Error initializing accel filter: {e}")
+            pass
+
 
     # ----------------- Lifecycle -----------------
 
     def reset(self):
         # ▼ 기존 상태의 timer_enabled를 보존(없으면 False)
         prev_timer_enabled = getattr(self.state, "timer_enabled", False)
-
+        # ▼ 기존 running 상태를 보존 (UI 명령이 random mode 상태 변경 시 중단되지 않도록)
+        prev_running = getattr(self, "running", False)
 
 
         # 계획 속도는 시나리오의 v0를 따로 들고 있고, 대기 상태에는 v=0으로 둔다
@@ -661,7 +703,12 @@ class StoppingSim:
         self.state = State(
             t=0.0, s=0.0, v=0.0, a=0.0, lever_notch=0, finished=False
         )
-        self.running = False
+        # Only stop if not in a continuing random scenario
+        # (If running due to random mode, keep it running unless explicitly stopped)
+        if not self.random_mode:
+            self.running = False
+        else:
+            self.running = prev_running
         self._cmd_queue.clear()
 
         self.first_brake_start = None
@@ -1304,7 +1351,10 @@ class StoppingSim:
             norm = max(0, min(100, norm))
             score = round(norm, 0)
             st.score = score
-            self.running = False
+            # In Random Scenario mode, keep running=True so physics can continue after finish
+            # (waiting for advanceStation command). In normal mode, stop the simulation.
+            if not self.random_mode:
+                self.running = False
             if DEBUG:
                 print(f"Avg jerk: {avg_jerk:.4f}, jerk_score: {jerk_score:.2f}, final score: {score}")
                 print(f"Simulation finished: stop_error={st.stop_error_m:.3f} m, score={score}")
@@ -1516,6 +1566,7 @@ async def ws_endpoint(ws: WebSocket):
                     dist = payload.get("dist")
                     grade = payload.get("grade", 0.0) / 10.0
                     mu = float(payload.get("mu", 1.0))
+                    random_mode = payload.get("random_mode", False)
                     if speed is not None and dist is not None:
                         # ▼ 서버 측 이중 방어(클램프) — 프론트와 동일
                         v_kmh_raw = float(speed)
@@ -1527,6 +1578,7 @@ async def ws_endpoint(ws: WebSocket):
                         sim.scn.L = L_m
                         sim.scn.grade_percent = float(grade)
                         sim.scn.mu = mu
+                        sim.random_mode = bool(random_mode)
 
                         # 클램프 여부 기록
                         sim.last_input_sanitized = {
@@ -1537,8 +1589,96 @@ async def ws_endpoint(ws: WebSocket):
 
                         if DEBUG:
                             print(f"setInitial: v0={v_kmh:.1f}km/h ({v_kmh_raw}), "
-                                  f"L={L_m:.0f}m ({L_raw}), grade={grade}%, mu={mu}")
+                                  f"L={L_m:.0f}m ({L_raw}), grade={grade}%, mu={mu}, random_mode={random_mode}")
                         sim.reset()  # reset()이 timer_enabled 보존 + budget 재계산
+
+                elif name == "advanceStation":
+                    # Advance to the next station. Make this robust by performing
+                    # a light reset while preserving world coordinate so visuals
+                    # remain continuous.
+                    try:
+                        if not getattr(sim.state, 'finished', False):
+                            # only meaningful when previous run has finished
+                            if DEBUG:
+                                print(f"[ADVANCE] Game not finished yet, ignoring advanceStation")
+                            continue
+
+                        dist = float(payload.get('dist', 600.0))
+                        grade = float(payload.get('grade', 0.0)) / 10.0
+                        mu = float(payload.get('mu', sim.scn.mu))
+
+                        # clamp sensible ranges (same policy as setInitial)
+                        dist = max(150.0, min(6000.0, dist))
+
+                        # preserve state across soft-reset
+                        prev_s = float(sim.state.s)
+                        prev_timer_enabled = getattr(sim.state, 'timer_enabled', False)
+                        prev_lever_notch = int(getattr(sim.state, 'lever_notch', 0))
+
+                        if DEBUG:
+                            print(f"[ADVANCE] Starting soft reset: prev_s={prev_s:.2f}, timer_enabled={prev_timer_enabled}, notch={prev_lever_notch}")
+
+                        # perform a reset to clear command queue / timing artifacts,
+                        # then restore the world coordinate and apply new scenario end
+                        sim.reset()
+
+                        # restore preserved flags/position/notch
+                        sim.state.s = prev_s
+                        sim.state.timer_enabled = prev_timer_enabled
+                        sim.state.lever_notch = prev_lever_notch
+
+                        # set new absolute L so that remaining == dist
+                        sim.scn.L = float(prev_s) + dist
+                        sim.scn.grade_percent = float(grade)
+                        sim.scn.mu = float(mu)
+
+                        # recompute timer budget according to new scenario
+                        try:
+                            tb = sim._compute_time_budget()
+                        except Exception:
+                            tb = getattr(sim.state, 'time_budget_s', 0.0)
+
+                        sim.state.time_budget_s = float(tb)
+                        sim.state.time_remaining_s = float(tb)
+                        sim.state.time_remaining_int = math.floor(sim.state.time_remaining_s)
+
+                        # enable timer if a positive budget was computed
+                        if sim.state.time_budget_s > 0.0:
+                            sim.state.timer_enabled = True
+
+                        # refresh vref in case L changed
+                        try:
+                            sim.vref = build_vref(sim.scn.L, 0.8 * sim.veh.a_max)
+                        except Exception:
+                            pass
+
+                        # start from rest and clear finished/run_over
+                        sim.state.finished = False
+                        sim.state.stop_error_m = None
+                        sim.state.residual_speed_kmh = 0.0
+                        sim.state.v = 0.0
+                        sim.state.a = 0.0
+                        sim.state.lever_notch = 0
+
+                        # CRITICAL: Set running=True to ensure physics loop continues
+                        sim.running = True
+                        sim.run_over = False
+                        
+                        # Ensure acceleration filter is reset to allow clean start
+                        sim._a_cmd_filt = 0.0
+
+                        if DEBUG:
+                            print(f"[ADVANCE] Completed: s={prev_s:.2f}m, L={sim.scn.L:.0f}m (remaining={dist:.0f}m), grade={sim.scn.grade_percent}%, mu={sim.scn.mu:.2f}, timer={sim.state.time_budget_s:.1f}s")
+                            print(f"[ADVANCE] *** CRITICAL CHECK ***")
+                            print(f"[ADVANCE] >>> sim.running={sim.running} (should be True)")
+                            print(f"[ADVANCE] >>> sim.state.v={sim.state.v} (should be 0.0)")
+                            print(f"[ADVANCE] >>> sim.state.finished={sim.state.finished} (should be False)")
+                            print(f"[ADVANCE] >>> sim._a_cmd_filt={sim._a_cmd_filt} (will be initialized when notch applied)")
+                    except Exception as e:
+                        if DEBUG:
+                            print(f"[ADVANCE] ERROR: {e}")
+                        import traceback
+                        traceback.print_exc()
 
                 elif name == "start":
                     sim.start()
@@ -1752,10 +1892,30 @@ async def ws_endpoint(ws: WebSocket):
         step_count = 0
         t_start = None  # 시작 시점은 start() 눌렀을 때 설정
         was_running = False
+        was_finished = False
+        loop_iterations = 0
 
         while True:
+            loop_iterations += 1
+            
+            # Detect if finished state just changed (soft-reset/advanceStation happened)
+            is_finished_now = getattr(sim.state, 'finished', False)
+            if is_finished_now != was_finished:
+                if DEBUG:
+                    print(f"[SIM_LOOP] Finished state changed: {was_finished} → {is_finished_now}")
+                if not is_finished_now and was_finished and sim.running:
+                    # Just transitioned from finished→not-finished while running
+                    # This means advanceStation reset the state, so reset timing!
+                    if DEBUG:
+                        print(f"[SIM_LOOP] *** DETECTED SOFT-RESET: Resetting timing (iteration {loop_iterations})")
+                    t_start = time.time()
+                    step_count = 0
+                was_finished = is_finished_now
+            
             if sim.running:
                 if not was_running:
+                    if DEBUG:
+                        print(f"[SIM_LOOP] Transitioned to running state (iteration {loop_iterations})")
                     t_start = time.time()
                     step_count = 0
 
@@ -1764,6 +1924,8 @@ async def ws_endpoint(ws: WebSocket):
 
             # 누적된 스텝만큼만 진행
                 for _ in range(step_count, expected_steps):
+                    if DEBUG and loop_iterations % 100 == 0:
+                        print(f"[SIM_LOOP] Executing step (iteration {loop_iterations}, step {step_count})")
                     sim.step()
 
                 step_count = expected_steps
@@ -1771,6 +1933,8 @@ async def ws_endpoint(ws: WebSocket):
 
             else:
             # ★ 정지 상태에서는 기준값들을 항상 초기화
+                if was_running and DEBUG:
+                    print(f"[SIM_LOOP] Transitioned to stopped state (iteration {loop_iterations})")
                 was_running = False
                 t_start = None
                 step_count = 0
