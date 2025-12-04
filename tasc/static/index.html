@@ -5042,7 +5042,7 @@ if (fb) {
     const last = Number(fb.dataset.lastUpdate);
 
     // 3초가 지났는지 확인 (3000ms)
-    if (now - last >= 3000) {
+    if (now - last >= 5000) {
       fb.textContent = "Space로 시작. W/S로 브레이크 조절하세요.";
       fb.dataset.lastUpdate = Date.now(); // 업데이트 시간 갱신
     }
