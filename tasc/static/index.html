@@ -2969,8 +2969,8 @@ function maybeSpawnEmergencyObstacle(initialDist) {
   // 조건 부족하면 생성 안 함
   if (!initialDist || initialDist <= 20) return;
 
-  // 5% 확률로만 생성
-  if (Math.random() > 0.05) return;
+  // 
+  if (Math.random() > 0.001) return;
 
   // 140m ~ 210m 사이에서만 장애물 위치 선택
   const minRange = 140;
@@ -5186,6 +5186,8 @@ const enabled = document.getElementById("tascToggle").checked;
 const rndEl = document.getElementById('rndToggle');
 const random_mode = !!(rndEl && rndEl.checked);
   if (!random_mode) window.__miniTimerIsRoute = false;
+    // 새 런 시작할 때 miniTimer 관련 변수 초기화
+    window.__miniTimerRemaining = null;
     if (!random_mode) {
       window.__routePendingTravelSec = null;
       window.__routePendingDepart = null;
@@ -5284,6 +5286,7 @@ const random_mode = !!(rndEl && rndEl.checked);
                 } catch(e){ if (miniTimer) miniTimer.textContent = String(remaining) + 's'; }
                 window.__miniTimerCountdownInterval = setInterval(()=>{
                   remaining = remaining - 1;
+                  window.__miniTimerRemaining = remaining; // Track remaining time for scoring
                   try { 
                     if (miniTimer) {
                       miniTimer.innerHTML = formatTimeSec(remaining);
@@ -5323,6 +5326,7 @@ const random_mode = !!(rndEl && rndEl.checked);
                   } catch(e){ if (miniTimer) miniTimer.textContent = String(remaining) + 's'; }
                   window.__miniTimerCountdownInterval = setInterval(()=>{
                     remaining = remaining - 1;
+                    window.__miniTimerRemaining = remaining; // Track remaining time for scoring
                     try { 
                       if (miniTimer) {
                         miniTimer.innerHTML = formatTimeSec(remaining);
@@ -5730,6 +5734,30 @@ ws.onmessage = (ev) => {
         }
       }
     }
+    
+    // miniTimer 점수 계산 (rndToggle이 켜져있을 때만)
+    try {
+      const rndEl = document.getElementById('rndToggle');
+      if (nowFinished && !lastFinishedFlag && rndEl && rndEl.checked && window.__miniTimerRemaining != null) {
+        const remaining = window.__miniTimerRemaining;
+        let timerScore = 0;
+        if (remaining >= 0) {
+          // 제시간에 도착하거나 일찍 왔으면 +20 (cap 100)
+          timerScore = 20;
+        } else {
+          // 15초씩 늦을때마다 -10 (최소 0점)
+          const lateSeconds = Math.abs(remaining);
+          const penaltyCount = Math.ceil(lateSeconds / 15);
+          timerScore = Math.max(0, -10 * penaltyCount);
+        }
+        score += timerScore;
+        if (score > 100) score = 100;
+        console.debug('miniTimer score calculation: remaining=', remaining, 'timerScore=', timerScore, 'totalScore=', score);
+      }
+    } catch (e) {
+      console.debug('miniTimer score calculation error:', e);
+    }
+    
     const stopErr = Number(st.stop_error_m ?? 0);
     showScoreOverlay(score, stopErr);
     
@@ -7108,7 +7136,7 @@ window.__brakeGuideOn = true;
         const goodErr = Math.abs(stopErr) <= 2;
 
         html += `<div class="${goodErr ? "ok" : "warn"}">${fbd.stopErr(stopErr)}</div>`;
-        html += `<div class="${goodErr ? "ok" : "warn"}">${fbd.score(score)}</div>`;
+        // html += `<div class="${goodErr ? "ok" : "warn"}">${fbd.score(score)}</div>`;
         html += `<div style="margin-top:8px;font-size:12px;color:#a6b7d1">${fbd.hintAgain}</div>`;
         nodes.fb.innerHTML = html;
       } else {

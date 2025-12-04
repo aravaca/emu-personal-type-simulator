@@ -286,7 +286,7 @@ class StoppingSim:
         self.timer_use_table = False
         self.timer_table = {}             # 예: {60:35, 70:30, 80:26}
         self.timer_v_target_kmh = 70.0    # 공식 기반 목표 속도(km/h)
-        self.timer_buffer_s = 60.0        # 여유초 (increased by ~20s)
+        self.timer_buffer_s = 60.0        # 여유초 
 
         # ---------- 타이머 자동 산출(보정 데이터 기반) ----------
         # 보정 데이터: [{"v":60, "L":200, "t":23}, ...]  (km/h, m, sec)
@@ -458,7 +458,7 @@ class StoppingSim:
     #     return a_eff
 
     # def _effective_brake_accel(self, notch: int, v: float) -> float:
-    #     # ✅ 악셀(음수) 또는 N(0)에서는 '브레이크 없음'
+    #     #  악셀(음수) 또는 N(0)에서는 '브레이크 없음'
     #     if notch <= 0:
     #         return 0.0
 
@@ -479,7 +479,7 @@ class StoppingSim:
     #     return a_eff
 
     def _effective_brake_accel(self, notch: int, v: float) -> float:
-        # ✅ 악셀(음수) 또는 N(0)에서는 '브레이크 없음'
+        #  악셀(음수) 또는 N(0)에서는 '브레이크 없음'
         if notch <= 0:
             return 0.0
 
@@ -1536,7 +1536,7 @@ async def ws_endpoint(ws: WebSocket):
     sim = StoppingSim(vehicle, scenario)
     sim.reset() # 초기화
 
-    # ✅ 최초 연결 직후: 기본 편성/탑승률을 즉시 반영해 총중량/데이비스 재계산
+    #  최초 연결 직후: 기본 편성/탑승률을 즉시 반영해 총중량/데이비스 재계산
     sim.veh.update_mass(cur_length) # 1차: 편성 반영
 
     base_1c_t = sim.veh.mass_t # 1량(공차) 톤
@@ -1552,7 +1552,7 @@ async def ws_endpoint(ws: WebSocket):
               f"| total={total_tons:.2f} t, mass_kg={sim.veh.mass_kg:.0f} "
               f"| A0={sim.veh.A0:.1f}, B1={sim.veh.B1:.2f}, C2={sim.veh.C2:.2f}")
 
-    sim.reset() # ✅ 재계산 반영된 상태로 다시 초기화(처음부터 일관)
+    sim.reset() #  재계산 반영된 상태로 다시 초기화(처음부터 일관)
     sim.running = False
 
 
@@ -1737,7 +1737,7 @@ async def ws_endpoint(ws: WebSocket):
 
                 elif name == "setTrainLength":
                     length = int(payload.get("length", 8))
-                    cur_length = length # ✅ 상태 저장
+                    cur_length = length #  상태 저장
 
                     # 길이 반영
                     sim.veh.update_mass(cur_length)
@@ -1758,7 +1758,7 @@ async def ws_endpoint(ws: WebSocket):
                     mass_tons = float(payload.get("mass_tons", 200.0))
                     sim.veh.mass_t = mass_tons / int(payload.get("length", 8))
                     sim.veh.mass_kg = mass_tons * 1000.0
-                    sim.veh.recompute_davis(sim.veh.mass_kg) # ✅ 새 질량으로 재계산
+                    sim.veh.recompute_davis(sim.veh.mass_kg) #  새 질량으로 재계산
                     if DEBUG:
                         print(
                             f"총중량={mass_tons:.2f} t -> "
@@ -1767,7 +1767,7 @@ async def ws_endpoint(ws: WebSocket):
                     sim.reset()
 
                 elif name == "setLoadRate":
-                    cur_load_rate = float(payload.get("loadRate", 0.0)) / 100.0 # ✅ 상태 저장
+                    cur_load_rate = float(payload.get("loadRate", 0.0)) / 100.0 #  상태 저장
 
                     # 길이/탑승률로 총중량 재산출
                     base_1c_t = sim.veh.mass_t
