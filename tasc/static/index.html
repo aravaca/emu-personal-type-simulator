@@ -1486,15 +1486,20 @@ function handleObstacleState(st) {
 </div>
     <div class="mini-hud-rows">
       <div class="mini-row">
-        <span class="mini-label">Clock</span>
+        <span class="mini-label"></span>
         <span class="mini-value" id="miniClock">--:--:--</span>
       </div>
       <div class="mini-row timer">
-        <span class="mini-label">Time Remaining</span>
+        <span class="mini-label">To Next Sta.</span>
         <span class="mini-value" id="miniTimer">
           <span class="min">00</span>
           <span class="sep">:</span><span class="sec">00</span>
         </span>
+      </div>
+
+      <div class="mini-row">
+        <span class="mini-label">Next</span>
+        <span class="mini-value" id="miniNext">—</span>
       </div>
 
       
@@ -2652,7 +2657,8 @@ const miniTimer = document.getElementById("miniTimer"),
   miniRemain = document.getElementById("miniRemain"),
   miniClock = document.getElementById("miniClock"),
       miniGrade = document.getElementById("miniGrade"),
-      miniNotch = document.getElementById("miniNotch");
+      miniNotch = document.getElementById("miniNotch"),
+      miniNext = document.getElementById("miniNext");
       miniTitle = document.getElementById("miniHudTitle");
 const overlay=document.getElementById("overlay"),
       btnStart=document.getElementById("btnStart"),
@@ -4963,6 +4969,10 @@ function randomizeInputs(){
     const ti = window.__routeTravelTimesIndex || 0;
     window.__routePendingTravelTimesIndex = ti;
     window.__routeTravelTimesIndex = (ti + 1) % window.__routeTravelTimes.length;
+    // Also increment station names index
+    if (window.__routeStationNames && Array.isArray(window.__routeStationNames)) {
+      window.__routeStationNamesIndex = ((window.__routeStationNamesIndex || 0) + 1) % window.__routeStationNames.length;
+    }
     window.__miniTimerIsRoute = true;
   } else {
     window.__routePendingTravelTimesIndex = null;
@@ -5856,6 +5866,15 @@ if (miniTimer) {
   }
 }
 
+// 🔹 mini HUD – Next Station (skip first row, show next station name)
+if (miniNext && window.__routeStationNames && Array.isArray(window.__routeStationNames)) {
+  const idx = window.__routeStationNamesIndex || 0;
+  // Skip the first row (idx=0), start from idx=1 for the "next" station
+  const nextIdx = (idx) % window.__routeStationNames.length;
+  const nextStationName = window.__routeStationNames[nextIdx] || "—";
+  miniNext.textContent = nextStationName;
+}
+
   // 그래프/미니 인디케이터
   // drawHUD(st);
   // drawBrakeLadderMini(st);
@@ -6698,6 +6717,7 @@ if (window.rebuildLeftPoles) {
               let arrIdx = -1;
               let departIdx = -1;
               let travIdx = -1;
+              let stationIdx = -1;
               for (let i = 0; i < headers.length; i++) {
                 const raw = headers[i] || '';
                 const h = raw.toLowerCase().replace(/\s+/g, '');
@@ -6705,10 +6725,12 @@ if (window.rebuildLeftPoles) {
                 if (arrIdx === -1 && (h.includes('arrival') || h.includes('arrivaltime') || h.includes('arrivaltime'))) { arrIdx = i; }
                 if (departIdx === -1 && (h.includes('depart') || h.includes('departure') || h.includes('departuretime'))) { departIdx = i; }
                 if (travIdx === -1 && (h.includes('traveltime') || h.includes('traveltimetonext') || h.includes('traveltimetonextsec') || h.includes('travel') || h.includes('travel_time') || h.includes('time_to_next') )) { travIdx = i; }
+                if (stationIdx === -1 && (h.includes('station') && h.includes('name'))) { stationIdx = i; }
               }
               if (colIdx === -1) throw new Error('no-col');
               const distances = [];
               const travelTimes = [];
+              const stationNames = [];
               for (let i = 1; i < lines.length; i++) {
                 const cols = lines[i].split(',');
                 if (cols.length > colIdx) {
@@ -6718,6 +6740,10 @@ if (window.rebuildLeftPoles) {
                 if (travIdx !== -1 && cols.length > travIdx) {
                   const t = Number(cols[travIdx].trim());
                   if (!Number.isNaN(t)) travelTimes.push(Math.round(t));
+                }
+                if (stationIdx !== -1 && cols.length > stationIdx) {
+                  const sname = cols[stationIdx].trim();
+                  stationNames.push(sname);
                 }
               }
               if (distances.length > 0) {
@@ -6730,6 +6756,14 @@ if (window.rebuildLeftPoles) {
                 } else {
                   window.__routeTravelTimes = null;
                   window.__routeTravelTimesIndex = 0;
+                }
+                // store station names if present
+                if (stationNames.length > 0) {
+                  window.__routeStationNames = stationNames;
+                  window.__routeStationNamesIndex = 0;
+                } else {
+                  window.__routeStationNames = null;
+                  window.__routeStationNamesIndex = 0;
                 }
                 // also parse departure times column if available for per-run timer trigger
                 try {
