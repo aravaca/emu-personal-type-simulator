@@ -5243,41 +5243,64 @@ const random_mode = !!(rndEl && rndEl.checked);
               console.debug('mini clock setup: no pending index or travel times');
             }
           } catch(e) { console.debug('pending setup error', e); }
-          // Immediate check: if current clock equals pending departure, start countdown immediately
+          // Immediate check: if current clock >= pending departure, start countdown immediately
           try {
             const curFmt0 = fmt(window.__miniHudClockCurrent);
+            const parseToSecLocal = (s) => {
+              const m = String(s).trim().match(/^(\d{1,2}):(\d{2})(?::(\d{2}))?$/);
+              if(!m) return null;
+              const hh = parseInt(m[1],10); const mm = parseInt(m[2],10); const ss = parseInt(m[3]||'0',10);
+              return ((hh%24)*3600 + mm*60 + ss);
+            };
             console.debug('immediate trigger check: curFmt=', curFmt0, 'pending depart=', window.__routePendingDepart, 'travel=', window.__routePendingTravelSec);
-            if (window.__routePendingDepart && window.__routePendingTravelSec != null && curFmt0 === window.__routePendingDepart && !window.__miniTimerCountdownInterval) {
-              console.debug('IMMEDIATE TRIGGER: starting countdown now');
-              let remaining = Number(window.__routePendingTravelSec) || 0;
-              try { 
-                if (miniTimer) {
-                  miniTimer.innerHTML = formatTimeSec(remaining);
-                  miniTimer.classList.toggle('late', remaining < 0);
-                }
-              } catch(e){ if (miniTimer) miniTimer.textContent = String(remaining) + 's'; }
-              window.__miniTimerCountdownInterval = setInterval(()=>{
-                remaining = remaining - 1;
+            if (window.__routePendingDepart && window.__routePendingTravelSec != null && !window.__miniTimerCountdownInterval) {
+              const curSec = window.__miniHudClockCurrent;
+              const departSec = parseToSecLocal(window.__routePendingDepart);
+              if (departSec != null && curSec >= departSec) {
+                // Clock has reached or passed departure time
+                const timePassed = curSec - departSec;
+                let remaining = Number(window.__routePendingTravelSec) || 0;
+                remaining = remaining - timePassed; // Subtract already-passed time
+                console.debug('IMMEDIATE TRIGGER: clock has passed departure. timePassed=', timePassed, 'remaining=', remaining);
                 try { 
                   if (miniTimer) {
                     miniTimer.innerHTML = formatTimeSec(remaining);
                     miniTimer.classList.toggle('late', remaining < 0);
                   }
                 } catch(e){ if (miniTimer) miniTimer.textContent = String(remaining) + 's'; }
-              }, 1000);
+                window.__miniTimerCountdownInterval = setInterval(()=>{
+                  remaining = remaining - 1;
+                  try { 
+                    if (miniTimer) {
+                      miniTimer.innerHTML = formatTimeSec(remaining);
+                      miniTimer.classList.toggle('late', remaining < 0);
+                    }
+                  } catch(e){ if (miniTimer) miniTimer.textContent = String(remaining) + 's'; }
+                }, 1000);
+              }
             }
           } catch(e) { console.debug('countdown trigger error', e); }
           window.__miniHudClockInterval = setInterval(()=>{
             const curFmt = fmt(window.__miniHudClockCurrent);
             try { if (miniClock) miniClock.textContent = curFmt; } catch(e){}
 
-            // If there's a pending route departure/time, start the miniTimer countdown when clock reaches departure
+            // If there's a pending route departure/time, start the miniTimer countdown when clock >= departure
             try {
-              if (window.__routePendingDepart && window.__routePendingTravelSec != null) {
-                if (curFmt === window.__routePendingDepart && !window.__miniTimerCountdownInterval) {
-                  console.debug('INTERVAL TRIGGER: clock=', curFmt, 'matched departure, starting countdown');
-                  // start countdown
+              if (window.__routePendingDepart && window.__routePendingTravelSec != null && !window.__miniTimerCountdownInterval) {
+                const parseToSecLocal = (s) => {
+                  const m = String(s).trim().match(/^(\d{1,2}):(\d{2})(?::(\d{2}))?$/);
+                  if(!m) return null;
+                  const hh = parseInt(m[1],10); const mm = parseInt(m[2],10); const ss = parseInt(m[3]||'0',10);
+                  return ((hh%24)*3600 + mm*60 + ss);
+                };
+                const curSec = window.__miniHudClockCurrent;
+                const departSec = parseToSecLocal(window.__routePendingDepart);
+                if (departSec != null && curSec >= departSec) {
+                  // Clock has reached or passed departure time
+                  const timePassed = curSec - departSec;
                   let remaining = Number(window.__routePendingTravelSec) || 0;
+                  remaining = remaining - timePassed; // Subtract already-passed time
+                  console.debug('INTERVAL TRIGGER: clock has reached departure. timePassed=', timePassed, 'remaining=', remaining);
                   try { 
                     if (miniTimer) {
                       miniTimer.innerHTML = formatTimeSec(remaining);
