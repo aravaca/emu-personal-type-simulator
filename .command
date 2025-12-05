@@ -1,5 +1,5 @@
 git add .
-git commit -m "fix tasc logic for e235"
+git commit -m "add e235 announcement"
 git push origin main
 
 pip install fastapi uvicorn[standard]
