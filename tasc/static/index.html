@@ -196,6 +196,10 @@
   font-size: 14px;
 }
 
+.mini-value.atc-limit {
+  color: #ff6b6b;
+}
+
 .mini-row.timer .min,
 .mini-row.timer .sec {
   font-variant-numeric: tabular-nums;
@@ -1104,7 +1108,7 @@ body {
 </style>
 
 <canvas id="ribbonBig" style="position:fixed; right:0; top:0; bottom:0; width:27px; height:100vh; pointer-events:none; z-index:10002; display:flex; align-items:right; justify-content:center;"></canvas>
-<!-- BEGIN PATCH: Cab 3D Card -->
+<!-- BEGIN PATSH: Cab 3D Card -->
 <style>
 /* Make the cab card tighter so the 3D view fills it with minimal padding */
 #cabCard {
@@ -1512,12 +1516,12 @@ function handleObstacleState(st) {
         <span class="mini-value" id="miniSpeed">—</span>
       </div>
       
-      <!-- <div class="mini-row">
+      <div class="mini-row">
         <span class="mini-label">Max Speed</span>
-        <span class="mini-value" id="miniMaxSpeed">90</span>
+        <span class="mini-value atc-limit" id="miniMaxSpeed">—</span>
       </div>
       
-      <div class="mini-row">
+      <!-- <div class="mini-row">
         <span class="mini-label">Next Limit</span>
         <span class="mini-value" id="miniNextLimit">—</span>
       </div> -->
@@ -1600,7 +1604,7 @@ function handleObstacleState(st) {
   })();
 </script>
 
-<!-- END PATCH: Cab 3D Card -->
+<!-- END PATSH: Cab 3D Card -->
 <div id="wrap" class="row" style="flex-direction:column">
   <div class="row" style="gap:16px;flex-wrap:wrap">
 
@@ -2662,7 +2666,8 @@ const miniTimer = document.getElementById("miniTimer"),
   miniClock = document.getElementById("miniClock"),
       miniGrade = document.getElementById("miniGrade"),
       miniNotch = document.getElementById("miniNotch"),
-      miniNext = document.getElementById("miniNext");
+      miniNext = document.getElementById("miniNext"),
+      miniMaxSpeed = document.getElementById("miniMaxSpeed");
       miniTitle = document.getElementById("miniHudTitle");
 const overlay=document.getElementById("overlay"),
       btnStart=document.getElementById("btnStart"),
@@ -3918,7 +3923,7 @@ class BveSoundEngine {
   constructor(ctx) {
     this.ctx = ctx;
     this.master = ctx.createGain();
-    this.master.gain.value = 1.0; // Master volume
+    this.master.gain.value = 2.0; // Master volume
     this.master.connect(ctx.destination);
 
     // CSV tables: { speed -> { wavName -> value } }
@@ -5005,6 +5010,10 @@ function randomizeInputs(){
     if (window.__routeStationNames && Array.isArray(window.__routeStationNames)) {
       window.__routeStationNamesIndex = ((window.__routeStationNamesIndex || 0) + 1) % window.__routeStationNames.length;
     }
+    // Also increment ATS index
+    if (window.__routeAtsValues && Array.isArray(window.__routeAtsValues)) {
+      window.__routeAtsIndex = ((window.__routeAtsIndex || 0) + 1) % window.__routeAtsValues.length;
+    }
     window.__miniTimerIsRoute = true;
   } else {
     window.__routePendingTravelTimesIndex = null;
@@ -5311,6 +5320,10 @@ const random_mode = !!(rndEl && rndEl.checked);
     // mini HUD 시계 초기화/시작 (CSV의 arrival time 첫 값을 사용)
     try{
       if (window.__miniHudClockInterval) { clearInterval(window.__miniHudClockInterval); window.__miniHudClockInterval = null; }
+      // Reset departure bell flag for this new run
+      window.__firstDepartureBellPlayed = false;
+      // Reset ATS overspeed protection for this new run
+      resetOverspeedProtection();
       if (random_mode && window.__routeClockStart) {
         const hhmmss = window.__routeClockStart;
         function parseToSec(s){
@@ -5404,6 +5417,22 @@ const random_mode = !!(rndEl && rndEl.checked);
             const curFmt = fmt(window.__miniHudClockCurrent);
             try { if (miniClock) miniClock.textContent = curFmt; } catch(e){}
 
+            // 🔔 Check for departure bell: play only once at the first station's departure time
+            try {
+              const rndEl = document.getElementById('rndToggle');
+              const isRandomMode = rndEl && rndEl.checked;
+              if (isRandomMode && window.__routeDepartures && Array.isArray(window.__routeDepartures) && !window.__firstDepartureBellPlayed) {
+                const curSec = window.__miniHudClockCurrent;
+                const curTime = fmt(curSec);
+                const firstDepTime = window.__routeDepartures[0];
+                if (firstDepTime && firstDepTime === curTime) {
+                  window.__firstDepartureBellPlayed = true;
+                  console.debug('Playing departure bell at first station:', curTime);
+                  playDepartureBell();
+                }
+              }
+            } catch(e) { console.debug('departure bell check error', e); }
+
             // If there's a pending route departure/time, start the miniTimer countdown when clock >= departure
             try {
               if (window.__routePendingDepart && window.__routePendingTravelSec != null && !window.__miniTimerCountdownInterval) {
@@ -5489,11 +5518,138 @@ btnMobileRestart.addEventListener("click", ()=>{
   btnMobileRestart.classList.add("hide");
 });
 
+/* ===== ATS DEPARTURE BELL TRACKING ===== */
+// Flag to track if the first departure bell has already played
+window.__firstDepartureBellPlayed = false;
+
+function playDepartureBell() {
+  try {
+    const bellAudio = new Audio('/static/E233/ExternalData/Sound/ATS/ats_p_bell2.wav');
+    bellAudio.volume = 0.7;
+    bellAudio.play().catch((err) => {
+      console.debug('Failed to play departure bell:', err);
+    });
+  } catch (e) {
+    console.debug('Error creating/playing departure bell:', e);
+  }
+}
+
+/* ===== ATS OVERSPEED PROTECTION ===== */
+// Track overspeed detection state
+window.__atsOverspeedTriggered = false;      // EB has been triggered
+window.__overspeedStartTime = null;          // When overspeed began (ms)
+window.__atsAlarmBuffer = null;              // Decoded audio buffer for seamless looping
+window.__atsAlarmSource = null;              // Current audio source node
+window.__atsAlarmGain = null;                // Gain node for volume control
+window.__atsAlarmContext = null;             // Audio context for Web Audio API
+window.__isEBApplied = false;                // EB has been applied
+
+// Load and cache the ATS alarm audio buffer
+async function loadAtsAlarmBuffer() {
+  try {
+    if (window.__atsAlarmBuffer) return; // Already loaded
+    
+    const response = await fetch('/static/E233/ExternalData/Sound/ATS/ATS.wav', { cache: 'no-store' });
+    if (!response.ok) throw new Error('Failed to fetch ATS.wav');
+    
+    const arrayBuffer = await response.arrayBuffer();
+    
+    // Get or create audio context
+    if (!window.__atsAlarmContext) {
+      window.__atsAlarmContext = new (window.AudioContext || window.webkitAudioContext)();
+    }
+    
+    window.__atsAlarmBuffer = await window.__atsAlarmContext.decodeAudioData(arrayBuffer);
+    console.debug('ATS alarm buffer loaded and decoded');
+  } catch (e) {
+    console.debug('Error loading ATS alarm buffer:', e);
+  }
+}
+
+function playAtsAlarm() {
+  try {
+    // If already playing, don't restart
+    if (window.__atsAlarmSource && !window.__atsAlarmSource.stopped) {
+      console.debug('ATS alarm already playing');
+      return;
+    }
+    
+    // Ensure context exists and is resumed
+    if (!window.__atsAlarmContext) {
+      window.__atsAlarmContext = new (window.AudioContext || window.webkitAudioContext)();
+    }
+    
+    if (window.__atsAlarmContext.state === 'suspended') {
+      window.__atsAlarmContext.resume().catch(() => {});
+    }
+    
+    // Ensure buffer is loaded
+    if (!window.__atsAlarmBuffer) {
+      loadAtsAlarmBuffer().then(() => playAtsAlarmSeamless());
+      return;
+    }
+    
+    playAtsAlarmSeamless();
+  } catch (e) {
+    console.debug('Error in playAtsAlarm:', e);
+  }
+}
+
+function playAtsAlarmSeamless() {
+  try {
+    // Create new source for seamless looping
+    const source = window.__atsAlarmContext.createBufferSource();
+    source.buffer = window.__atsAlarmBuffer;
+    source.loop = true;
+    
+    // Create or reuse gain node
+    if (!window.__atsAlarmGain) {
+      window.__atsAlarmGain = window.__atsAlarmContext.createGain();
+      window.__atsAlarmGain.connect(window.__atsAlarmContext.destination);
+    }
+    
+    window.__atsAlarmGain.gain.value = 0.8;
+    source.connect(window.__atsAlarmGain);
+    source.start(0);
+    
+    window.__atsAlarmSource = source;
+    console.debug('ATS alarm started seamlessly');
+  } catch (e) {
+    console.debug('Error in playAtsAlarmSeamless:', e);
+  }
+}
+
+function stopAtsAlarm() {
+  try {
+    if (window.__atsAlarmSource && !window.__atsAlarmSource.stopped) {
+      window.__atsAlarmSource.stop(0);
+      window.__atsAlarmSource.disconnect();
+      window.__atsAlarmSource = null;
+      console.debug('ATS alarm stopped');
+    }
+  } catch (e) {
+    console.debug('Error stopping ATS alarm:', e);
+  }
+}
+
+function resetOverspeedProtection() {
+  window.__atsOverspeedTriggered = false;
+  window.__overspeedStartTime = null;
+  window.__isEBApplied = false;
+  stopAtsAlarm();
+  console.debug('Overspeed protection reset');
+}
+
 /* ===== 모바일 터치 조작 ===== */
 if(/Mobi|Android|iPhone|iPad/i.test(navigator.userAgent)){
   const game=document.getElementById("hud");
   game.addEventListener("touchstart",(e)=>{
   e.preventDefault();
+    // 🔴 Block touch input if ATS overspeed protection is active
+    if (window.__atsOverspeedTriggered) {
+      console.debug('Touch input blocked - ATS overspeed protection active');
+      return;
+    }
     if(!overlay.classList.contains("hide")) return;
     if(e.touches.length!==1) return;
     // forceManualOverride();
@@ -5507,6 +5663,12 @@ if(/Mobi|Android|iPhone|iPad/i.test(navigator.userAgent)){
 addEventListener("keydown", (e) => {
   if([" ","w","W","s","S","n","N","e","E","d","D", "a", "A", 'q', 'Q'].includes(e.key)) e.preventDefault();
   if(e.repeat) return;
+
+  // 🔴 Block all user input if ATS overspeed protection is active
+  if (window.__atsOverspeedTriggered) {
+    console.debug('User input blocked - ATS overspeed protection active');
+    return;
+  }
 
   if (e.key === " ") {
     // Check state before taking action
@@ -5650,27 +5812,56 @@ async function loadAirSounds() {
   } catch (e) { console.debug('AirUp load error', e); }
 }
 
-function playAirBuffer(arrayBuffer, volume = 0.9) {
+function playAirBuffer(arrayBuffer, volume = 0.9, gainFactor = 2.0) {
   if (!arrayBuffer) return;
+
   try {
     if (!bveCtx) {
-      // fallback to HTMLAudioElement
-      try { const a = new Audio('/static/E233/OriginalData/Sound/Air/AirDownZero1.wav'); a.volume = volume; a.play().catch(()=>{}); } catch(e){}
+      // Fallback to HTMLAudioElement
+      try {
+        const a = new Audio('/static/E233/OriginalData/Sound/Air/AirDownZero1.wav');
+        a.volume = volume;
+        a.play().catch(() => {});
+      } catch (e) {}
       return;
     }
+
     if (bveCtx.state === 'suspended') {
       bveCtx.resume().then(() => {
         bveCtx.decodeAudioData(arrayBuffer.slice(0), (buffer) => {
-          const src = bveCtx.createBufferSource(); src.buffer = buffer; const gain = bveCtx.createGain(); gain.gain.value = volume; src.connect(gain); gain.connect(bveCtx.destination); src.start();
-        }, (err) => { console.debug('decode air buffer error', err); });
+          const src = bveCtx.createBufferSource();
+          src.buffer = buffer;
+
+          const gain = bveCtx.createGain();
+          gain.gain.value = volume * gainFactor; // Increase volume by the gainFactor
+
+          src.connect(gain);
+          gain.connect(bveCtx.destination);
+          src.start();
+        }, (err) => { 
+          console.debug('decode air buffer error', err); 
+        });
       }).catch(() => {});
     } else {
       bveCtx.decodeAudioData(arrayBuffer.slice(0), (buffer) => {
-        const src = bveCtx.createBufferSource(); src.buffer = buffer; const gain = bveCtx.createGain(); gain.gain.value = volume; src.connect(gain); gain.connect(bveCtx.destination); src.start();
-      }, (err) => { console.debug('decode air buffer error', err); });
+        const src = bveCtx.createBufferSource();
+        src.buffer = buffer;
+
+        const gain = bveCtx.createGain();
+        gain.gain.value = volume * gainFactor; // Increase volume by the gainFactor
+
+        src.connect(gain);
+        gain.connect(bveCtx.destination);
+        src.start();
+      }, (err) => { 
+        console.debug('decode air buffer error', err); 
+      });
     }
-  } catch (e) { console.debug('playAirBuffer error', e); }
+  } catch (e) { 
+    console.debug('playAirBuffer error', e); 
+  }
 }
+
 function playNotchSound() {
   if (!notchSoundFile || !bveCtx) return;
   try {
@@ -5728,16 +5919,25 @@ ws.onmessage = (ev) => {
         const ebIndex = (typeof getEbIndex === 'function') ? getEbIndex() : 8;
 
         // Condition: speed == 0 and brake notch decreased from 4 -> 3 => AirDownZero1.wav
-        if (speed === 0 && prev === 4 && cur === 3) {
+        const prevList = [ebIndex, ebIndex - 2, 8, 7, 6, 5, 4, 3, 2];
+        const curList = [3, 2, 0, -4, -5, -13,-18];
+
+        if (speed <= 4 && prevList.includes(prev) && curList.includes(cur)) {
           playAirBuffer(airDownZeroFile, 0.9);
         }
 
-        // Condition: speed == 0 and brake notch equals EB index => AirDownEB.wav
-        if (speed === 0 && cur === ebIndex - 1) {
+        // Condition: speed == 0 and brake notch equals EB - 1 index => AirDownEB.wav
+        const prevList3 = [ebIndex,]; // example list
+        const curList3 = [ebIndex - 1 , 1, 0, -4, -5, -13,-18 ]; // only EB index
+        if (speed == 0 && ((prevList3.includes(prev) && curList3.includes(cur)) || (prev == 0 && cur == ebIndex) || (prev == ebIndex -2 && cur == ebIndex - 1))) {
           playAirBuffer(airDownEBFile, 0.95);
         }
 
-        if (speed === 0 && ((prev === 7 && cur === 6) || (prev === 6 && cur === 5) || (prev === 5 && cur === 4) || (prev === 3 && cur === 2) || (prev === 2 && cur === 1) || (prev === 1 && cur === 0))) {
+
+        const prevList2 = [7, 6, 5, 4, 3, 2, 1];
+        const curList2 = [6, 5, 4, 3, 2, 1, 0, -4, -5, -13,-18];
+
+        if (speed == 0 && prevList2.includes(prev) && curList2.includes(cur)) {
           playAirBuffer(airUpFile, 0.9);
         }
       } catch (e) { console.debug('air-down play error', e); }
@@ -5955,6 +6155,80 @@ miniSpeed.innerHTML = `
   <span class="unit">km/h</span>
 `;
 
+// 🔹 mini HUD – 최대 속도 (ATS)
+try {
+  if (window.__routeAtsValues && Array.isArray(window.__routeAtsValues) && window.__routeAtsIndex != null) {
+    const atsIdx = window.__routeAtsIndex % window.__routeAtsValues.length;
+    const atsHal = window.__routeAtsValues[atsIdx];
+    if (atsHal !== null && typeof atsHal === 'number') {
+      miniMaxSpeed.innerHTML = `${atsHal} <span class="unit">km/h</span>`;
+    } else {
+      miniMaxSpeed.textContent = '—';
+    }
+  } else {
+    miniMaxSpeed.textContent = '—';
+  }
+} catch (e) {
+  miniMaxSpeed.textContent = '—';
+}
+
+// 🔔 ATS OVERSPEED PROTECTION: Check if speed exceeds max speed
+try {
+  const currentSpeedKmh = st.v * 3.6;
+  let maxSpeedKmh = null;
+  
+  // Get max speed from ATS values if available
+  if (window.__routeAtsValues && Array.isArray(window.__routeAtsValues) && window.__routeAtsIndex != null) {
+    const atsIdx = window.__routeAtsIndex % window.__routeAtsValues.length;
+    const atsVal = window.__routeAtsValues[atsIdx];
+    if (atsVal !== null && typeof atsVal === 'number') {
+      maxSpeedKmh = atsVal;
+    }
+  }
+  
+  // If no ATC data, skip overspeed check
+  if (maxSpeedKmh !== null) {
+    const isOverspeeding = currentSpeedKmh > maxSpeedKmh;
+    
+    if (isOverspeeding) {
+      // Train is overspeeding
+      if (!window.__overspeedStartTime) {
+        window.__overspeedStartTime = Date.now();
+        console.debug('Overspeed detected at', currentSpeedKmh, 'km/h (limit:', maxSpeedKmh, ')');
+      }
+      
+      const overspeedDuration = (Date.now() - window.__overspeedStartTime) / 1000; // seconds
+      
+      // If overspeed for > 5 seconds and EB not yet applied, trigger EB
+      if (overspeedDuration > 5 && !window.__atsOverspeedTriggered) {
+        window.__atsOverspeedTriggered = true;
+        window.__isEBApplied = true;
+        
+        console.debug('ATS OVERSPEED TRIGGERED: EB engaged, alarm playing');
+        playAtsAlarm();
+        
+        // Send EB command to server
+        if (ws && ws.readyState === WebSocket.OPEN) {
+          sendCmd('emergencyBrake', 0);
+        }
+      }
+    } else {
+      // Train is not overspeeding - reset the timer
+      if (window.__overspeedStartTime) {
+        window.__overspeedStartTime = null;
+        console.debug('Overspeed condition cleared');
+      }
+    }
+    
+    // If EB was applied and train has stopped (speed near 0), allow user input again
+    if (window.__atsOverspeedTriggered && currentSpeedKmh < 0.5) {
+      console.debug('Train stopped after overspeed - resetting ATS protection');
+      resetOverspeedProtection();
+    }
+  }
+} catch (e) {
+  console.debug('ATS overspeed check error:', e);
+}
 
 const maxIdx = (vehicle?.notches ?? 10) - 1; // EB 인덱스
 const forwardAccels = vehicle?.forward_notch_accels ?? [0.139, 0.278, 0.417, 0.556, 0.694];
@@ -6887,6 +7161,7 @@ if (window.rebuildLeftPoles) {
               let travIdx = -1;
               let stationIdx = -1;
               let endIdx = -1;
+              let atsIdx = -1;
               for (let i = 0; i < headers.length; i++) {
                 const raw = headers[i] || '';
                 const h = raw.toLowerCase().replace(/\s+/g, '');
@@ -6896,12 +7171,14 @@ if (window.rebuildLeftPoles) {
                 if (travIdx === -1 && (h.includes('traveltime') || h.includes('traveltimetonext') || h.includes('traveltimetonextsec') || h.includes('travel') || h.includes('travel_time') || h.includes('time_to_next') )) { travIdx = i; }
                 if (stationIdx === -1 && (h.includes('station') && h.includes('name'))) { stationIdx = i; }
                 if (endIdx === -1 && (h === 'end' || h === 'isend' || h === 'isterminal' || h === 'terminal')) { endIdx = i; }
+                if (atsIdx === -1 && (h === 'ats' || h.includes('ats') || h.includes('speedlimit') || h.includes('maxspeed'))) { atsIdx = i; }
               }
               if (colIdx === -1) throw new Error('no-col');
               const distances = [];
               const travelTimes = [];
               const stationNames = [];
               const endFlags = [];
+              const atsValues = [];
               for (let i = 1; i < lines.length; i++) {
                 const cols = lines[i].split(',');
                 if (cols.length > colIdx) {
@@ -6923,6 +7200,14 @@ if (window.rebuildLeftPoles) {
                 } else {
                   endFlags.push(0);
                 }
+                // Parse ATS column if present
+                if (atsIdx !== -1 && cols.length > atsIdx) {
+                  const atsHal = Number(cols[atsIdx].trim());
+                  if (!Number.isNaN(atsHal)) atsValues.push(Math.round(atsHal));
+                  else atsValues.push(null);
+                } else {
+                  atsValues.push(null);
+                }
               }
               if (distances.length > 0) {
                 window.__routeDistances = distances;
@@ -6943,6 +7228,14 @@ if (window.rebuildLeftPoles) {
                 } else {
                   window.__routeStationNames = null;
                   window.__routeStationNamesIndex = 0;
+                }
+                // store ATS values if present
+                if (atsValues.length > 0) {
+                  window.__routeAtsValues = atsValues;
+                  window.__routeAtsIndex = 0;
+                } else {
+                  window.__routeAtsValues = null;
+                  window.__routeAtsIndex = 0;
                 }
                 // also parse departure times column if available for per-run timer trigger
                 try {
