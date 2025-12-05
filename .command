@@ -1,5 +1,5 @@
 git add .
-git commit -m "add e235 announcement"
+git commit -m "add dia time badge"
 git push origin main
 
 pip install fastapi uvicorn[standard]

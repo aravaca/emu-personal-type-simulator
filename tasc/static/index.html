@@ -478,6 +478,19 @@ button:hover,.btn-primary:hover{background:linear-gradient(135deg,#0072ff,#00c6f
   gap: 2px;
 }
 
+.diagram-icon {
+  font-size: .75rem;
+  display: inline-flex;
+  align-items: center;
+}
+
+.diagram-time {
+  font-size: .65rem;
+  letter-spacing: -0.02em;
+  opacity: .85;
+  font-weight: 500;
+}
+
 .diff-gauge .cell {
   width: 7px;
   height: 11px;
@@ -1850,6 +1863,12 @@ function handleObstacleState(st) {
               <span class="cell"></span>
               <span class="cell"></span>
             </span>
+          </span>
+
+          <!-- 5: 다이어그램 소요시간 -->
+          <span class="badge-chip secondary" id="diagramTimeBadge" style="display: none;">
+            <span class="diagram-icon">⏱</span>
+            <span class="diagram-time" id="diagramTimeText"></span>
           </span>
         </div>
 
@@ -7015,6 +7034,17 @@ function updateTrainDifficultyBadges(vehicle){
 
   setDifficultyGauge(brakeGaugeEl, brake || 3); // 값 없으면 기본 3
   setDifficultyGauge(ctrlGaugeEl, ctrl || 3);
+
+  // 다이어그램 시간 업데이트
+  const diagramTimeBadge = document.getElementById('diagramTimeBadge');
+  const diagramTimeText = document.getElementById('diagramTimeText');
+  
+  if (vehicle.diagram_time) {
+    diagramTimeText.textContent = vehicle.diagram_time;
+    diagramTimeBadge.style.display = 'inline-flex';
+  } else {
+    diagramTimeBadge.style.display = 'none';
+  }
 }
 
 function updateTrainPreview(info){
