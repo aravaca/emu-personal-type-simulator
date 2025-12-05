@@ -5102,6 +5102,15 @@ window.continueToNextStation = function() {
       ws.send(JSON.stringify({ type: 'cmd', payload: { name: 'advanceStation', dist: dist, grade: grade, mu: mu } }));
     }
 
+    // If previous run overran and requested EB on next start, apply EB now
+    try {
+      if (window.__forceNextStartEB) {
+        try { sendCmd("emergencyBrake", 0); } catch (e) { console.debug('continueToNextStation: force EB sendCmd failed', e); }
+        window.__forceNextStartEB = false;
+        console.debug('continueToNextStation: applied forced EB for next run');
+      }
+    } catch (e) { console.debug('continueToNextStation: force EB apply error', e); }
+
     // Hide overlay and mark that we're no longer showing results
     try { overlay.classList.add('hide'); } catch (e) {}
     overlayShowingResult = false;
@@ -5125,6 +5134,14 @@ window.continueToNextStation = function() {
         // Show static travel time in miniTimer
         const miniTimer = document.getElementById('miniTimer');
         try {
+          // Ensure any previous countdown is stopped so it doesn't overwrite the new static value
+          try {
+            if (window.__miniTimerCountdownInterval) { clearInterval(window.__miniTimerCountdownInterval); window.__miniTimerCountdownInterval = null; }
+          } catch (e) { /* non-fatal */ }
+
+          // Reset remaining tracker
+          window.__miniTimerRemaining = null;
+
           if (typeof formatTimeSec === 'function') {
             const s = window.__routePendingTravelSec;
             if (miniTimer) {
@@ -5257,6 +5274,11 @@ const random_mode = !!(rndEl && rndEl.checked);
         // sendCmd을 사용하면 ws 연결 여부를 자체 체크함
         sendCmd("emergencyBrake", 0);
         window.__rndStartForceEB = false;
+      }
+      // If a general force-EB flag was set (e.g., previous run overran), apply EB regardless of random mode
+      if (window.__forceNextStartEB) {
+        try { sendCmd("emergencyBrake", 0); } catch (e) { console.debug('forceNextStartEB sendCmd failed', e); }
+        window.__forceNextStartEB = false;
       }
     }catch(e){console.debug('force EB failed', e);}    
     // mini HUD 시계 초기화/시작 (CSV의 arrival time 첫 값을 사용)
@@ -5846,6 +5868,16 @@ ws.onmessage = (ev) => {
     } catch (e) {
       console.debug("Door sound play error on finish:", e);
     }
+    // If the run finished because the train overran beyond -5m, mark next run to start with EB
+    try {
+      const remCheck = (typeof st.remaining_m === 'number') ? st.remaining_m : parseFloat(st.remaining_m);
+      // Use <= to catch equality cases where remaining_m is exactly -5
+      if (typeof remCheck === 'number' && !Number.isNaN(remCheck) && remCheck <= -5) {
+        // Force next run to start with EB notch
+        window.__forceNextStartEB = true;
+        console.debug('Run ended by overrun (rem=', remCheck, ') -> forcing EB on next start');
+      }
+    } catch (e) { console.debug('force EB flag set error', e); }
   }
   // 게임이 재시작될 때 도어음 트리거 리셋 (finished: true → false)
   if (!nowFinished && lastFinishedFlag && bveSoundEngine) {
