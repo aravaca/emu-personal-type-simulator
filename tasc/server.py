@@ -229,6 +229,7 @@ class StoppingSim:
 
         # ---------- TASC ----------``
         self.tasc_enabled = False
+        self.tasc_enabled_initially = False  # random mode에서 TASC 복구용 플래그
         self.manual_override = False
         self.tasc_deadband_m = 0.05 #0.05
         self.tasc_hold_min_s = 0.05
@@ -649,7 +650,7 @@ class StoppingSim:
         val = cmd["val"]
 
         # ▼ TASC가 'active'인 상태에서 수동 개입이 들어오면 즉시 TASC를 OFF
-        if self.tasc_enabled and self.tasc_active and name in ("stepNotch", "applyNotch", "release", "emergencyBrake"):
+        if self.tasc_enabled and self.tasc_active and name in ("emergencyBrake"):
             self.tasc_enabled = False
             self.tasc_active = False
             self.tasc_armed = False
@@ -1365,6 +1366,16 @@ class StoppingSim:
             # Store final notch for random mode reload
             self.final_notch_on_finish = st.lever_notch
             
+            # Random mode에서 TASC가 초기에 활성화되었다면 복구
+            if self.random_mode and self.tasc_enabled_initially:
+                self.tasc_enabled = True
+                self.tasc_armed = True
+                self.tasc_active = False
+                self._tasc_phase = "build"
+                self._tasc_peak_notch = 1
+                if DEBUG:
+                    print("[FINISH] TASC restored for next run (random_mode + tasc_enabled_initially)")
+            
             # In Random Scenario mode, keep running=True so physics can continue after finish
             # (waiting for advanceStation command). In normal mode, stop the simulation.
             if not self.random_mode:
@@ -1785,6 +1796,7 @@ async def ws_endpoint(ws: WebSocket):
                 elif name == "setTASC":
                     enabled = bool(payload.get("enabled", False))
                     sim.tasc_enabled = enabled
+                    sim.tasc_enabled_initially = enabled  # random mode 복구용 저장
                     if enabled:
                         sim.manual_override = False
                         sim._tasc_last_change_t = sim.state.t
