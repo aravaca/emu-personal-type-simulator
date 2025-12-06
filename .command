@@ -1,5 +1,5 @@
 git add .
-git commit -m "fix rndtoggle bug"
+git commit -m "announcement bug fix"
 git push origin main
 
 pip install fastapi uvicorn[standard]

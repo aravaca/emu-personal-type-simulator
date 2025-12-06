@@ -873,11 +873,11 @@ class StoppingSim:
             # ------------------------------------------------------------------
             v_kmh = v * 3.6
             
-            # 점착력 제한 (고속 슬립 방지)
-            mu = 13.6 / (85 + v_kmh)
-            F_adhesion = mu * mass_kg * 9.81 
+            # # 점착력 제한 (고속 슬립 방지)
+            # mu = 13.6 / (85 + v_kmh)
+            # F_adhesion = mu * mass_kg * 9.81 
             
-            F_final = min(F_physics, F_adhesion)
+            F_final = F_physics
 
             # 가속도 산출
             a_pwr = F_final / mass_kg
