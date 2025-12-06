@@ -1,5 +1,5 @@
 git add .
-git commit -m "add dia time badge"
+git commit -m "add diagrams"
 git push origin main
 
 pip install fastapi uvicorn[standard]

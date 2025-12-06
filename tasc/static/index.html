@@ -1713,7 +1713,7 @@ function handleObstacleState(st) {
       <div class="rnd-toggle">
         <input type="checkbox" id="rndToggle" />
         <label for="rndToggle" class="slider"></label>
-        <span class="tasc-label" style="font-family: 'A-OTF Shin Go Pro', sans-serif; font-style: normal; font-weight: 700; ">Drive Mode</span>
+        <span class="tasc-label" style="font-family: 'A-OTF Shin Go Pro', sans-serif; font-style: normal; font-weight: 700; ">⏱ Drive Mode</span>
       </div>
     </div>
 
@@ -1759,7 +1759,7 @@ function handleObstacleState(st) {
         </label>
 
         <label class="form-label"><span id="labelInitDist">거리 (m)</span>
-          <input id="inputDist" type="number" value="600" min="150" max="6000" step="100" class="form-input">
+          <input id="inputDist" type="number" value="600" min="150" max="60000" step="100" class="form-input">
         </label>
 
         <label class="form-label"><span id="labelGradeInput">경사도 (‰)</span>
@@ -3091,7 +3091,7 @@ const groundMat = new THREE.MeshStandardMaterial({
   metalness: 0.0     // 금속성 없음
 });
 
-const ground = new THREE.Mesh(new THREE.PlaneGeometry(20, 12000, 1, 1), groundMat);
+const ground = new THREE.Mesh(new THREE.PlaneGeometry(20, 120000, 1, 1), groundMat);
 ground.rotation.x = -Math.PI / 2;
 ground.position.y = -0.1;
 ground.position.z = 200;
@@ -3147,7 +3147,7 @@ function createTrackCanvasTexture() {
   // track plane: a narrow strip representing sleepers+ballast; rails will still have metallic highlights
   const trackMat = new THREE.MeshStandardMaterial({ map: trackTex, roughness: 0.85, metalness: 0.05 });
   const trackWidth = 3.0;
-  const trackLen = 12000;
+  const trackLen = 120000;
   const trackGeo = new THREE.PlaneGeometry(trackWidth, trackLen, 1, 1);
   const track = new THREE.Mesh(trackGeo, trackMat);
   track.rotation.x = -Math.PI/2;
@@ -3174,7 +3174,7 @@ function createTrackCanvasTexture() {
 
   // rails (thin metallic extrusions) on top of the track plane for specular highlights and correct shading
   const railMat = new THREE.MeshStandardMaterial({ color:0xe0e5e5, metalness:0.95, roughness:0.28 });
-  const railH = 0.14, railW = 0.065, railLen = 12000;
+  const railH = 0.14, railW = 0.065, railLen = 120000;
   const railGeo = new THREE.BoxGeometry(railW, railH, railLen);
   const railL = new THREE.Mesh(railGeo, railMat);
   const railR = new THREE.Mesh(railGeo, railMat);
@@ -3258,7 +3258,7 @@ function createTrackCanvasTexture() {
 const poleInterval = 55;
 const poleMinDistRight = -100;  // 기존
 const poleMinDistLeft = -100;   // 변경
-const poleMaxDist = 6000;
+const poleMaxDist = 60000;
 // 👉 platRemove를 전역 변수로
 let platRemove = 215;
 
@@ -3316,7 +3316,7 @@ window.rebuildLeftPoles = rebuildLeftPoles;
 
   // 전선은 '플랫폼 전'뿐 아니라 '플랫폼 끝까지' 이어지게 길게 뽑자
   // 예시: 정차 위치 기준 -800m 지점부터 +100m 지점까지
-  const wireZStart = 200 - 6000; // 멀리
+  const wireZStart = 200 - 60000; // 멀리
   const wireZEnd = 200 + 100; // 정차 지점 약간 지나서
   const wireLen = Math.abs(wireZEnd - wireZStart);
   const wireZMid = (wireZStart + wireZEnd) / 2;
@@ -4903,7 +4903,7 @@ function enforceFloat(el,min,max,d=1){ el.addEventListener('input',()=>{ el.valu
 
 /*  범위 갱신: 속도 40~130 / 거리 150~900 */
 enforceInt(inputSpeed,0,300);
-enforceInt(inputDist,150,6000);
+enforceInt(inputDist,150,60000);
 enforceInt(inputLoadRate,0,120);
 enforceFloat(inputGrade,-10,10,1);
 
@@ -4936,7 +4936,7 @@ function applySpeedDistanceRule() {
   v = Math.max(0, v);
   const requiredMin = minDistForSpeed(v);
   let d = Number(inputDist.value || 0);
-  const absoluteMin = 150, absoluteMax = 6000;
+  const absoluteMin = 150, absoluteMax = 60000;
   const newMin = Math.max(absoluteMin, requiredMin);
 
   inputDist.min = String(newMin);
@@ -5035,7 +5035,7 @@ function randomizeInputs(){
   if (window.__routeDistances && Array.isArray(window.__routeDistances) && window.__routeDistances.length > 0) {
     const idx = window.__routeDistancesIndex || 0;
     const d = window.__routeDistances[idx % window.__routeDistances.length];
-    inputDist.value = String(Math.max(150, Math.min(6000, Math.round(d))));
+    inputDist.value = String(Math.max(150, Math.min(60000, Math.round(d))));
     window.__routeDistancesIndex = (idx + 1) % window.__routeDistances.length;
   } else {
     const d = randInt(1000, 2000);
@@ -7446,7 +7446,7 @@ window.__brakeGuideOn = true;
       labelDown: "완화",
       labelRelease: "중립",
       subtitleIntro: 
-  "TASC 활성화 시 사용법: <b>150m</b> (P3 TASC 지상자) 지점까지 속도를 <b>60km/h</b> 이하로 낮추세요. 그 이후에는 <b>TASC(자동정차)</b>가 이루어집니다.",
+  "E235계열 차량의 TASC 활성화 시 사용법: <b>250m</b> 지점 전에 주간제어기를 <b>제동 1단</b>으로 체결해주세요. 그 이후에는 <b>TASC, 자동정차</b>가 이루어집니다.",
 
       labelTASC: "TASC",
       labelTrain: "전동차",
@@ -7502,9 +7502,7 @@ window.__brakeGuideOn = true;
       labelDown: "B-",
       labelRelease: "Release",
       subtitleIntro: 
-  // "Apply B1/B2 braking and slow down to below 60 km/h by 150 m remaining (P3 TASC beacon). Then, TASC (autopilot) takes over brake control.",
-     "TASC activation instructions: Reduce speed to <b>60 km/h</b> by the <b>150 m</b> point. After that, <b>TASC (Automatic Stopping)</b> will take over.",
-
+"E235 series TASC instructions: Before the <b>250m</b> point, set the master controller to <b>Brake Notch 1</b>. After that, TASC will handle automatic stopping.",
       labelTASC: "TASC",
       labelTrain: "EMU",
       labelSeries: "Series",

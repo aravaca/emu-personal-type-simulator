@@ -195,7 +195,7 @@ class StoppingSim:
        
         self._planned_v0 = scn.v0  # 출발 버튼 누를 때 쓸 예정 속도
         # --- 인계 지점(남은거리) & 히스테리시스 설정 ---
-        self.tasc_takeover_rem_m = 150.0 # 인계 거리 (m)
+        self.tasc_takeover_rem_m = 250.0 # 인계 거리 (m)
         self.tasc_takeover_hyst_m = 1 # add some randomness like real world tasc beacons!
 
         self.veh = veh
@@ -1598,7 +1598,7 @@ async def ws_endpoint(ws: WebSocket):
                         v_kmh_raw = float(speed)
                         L_raw = float(dist)
                         v_kmh = max(0,  min(300.0, v_kmh_raw))
-                        L_m   = max(150.0, min(6000.0,  L_raw))
+                        L_m   = max(150.0, min(60000.0,  L_raw))
 
                         sim.scn.v0 = v_kmh / 3.6
                         sim.scn.L = L_m
@@ -1642,7 +1642,7 @@ async def ws_endpoint(ws: WebSocket):
                         mu = float(payload.get('mu', sim.scn.mu))
 
                         # clamp sensible ranges (same policy as setInitial)
-                        dist = max(150.0, min(6000.0, dist))
+                        dist = max(150.0, min(60000.0, dist))
 
                         # preserve state across soft-reset
                         prev_s = float(sim.state.s)
