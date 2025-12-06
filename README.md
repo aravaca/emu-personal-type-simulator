@@ -18,9 +18,9 @@ Supports:
 - **Emergency** scenarios including obstacles on track and rail suicides.
 - **Brake navigation** to explore efficient brake profiles (Toggle with B)
 - **Mini HUD** to assist trainees
-- Real-world diagrams that can be operated in Drive Mode
-- Realistic VVVF sounds
-- Safety systems, such as ATS & ATC
+- Real-world time diagrams in Drive Mode
+- VVVF sounds based on velocity-based pitch modulation 
+- Safety systems, such as ATS 
 
 Powered by **Three.js 3D visualization**, the simulator delivers an immersive driver’s POV and realistic track environment.  
 Real-time **velocity–distance** and **braking curve** rendering provides intuitive, instant feedback.
