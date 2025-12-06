@@ -2036,6 +2036,16 @@ const CAB_LAYOUTS = {
 
     ],
     speedText: { x: 897, y: 905, fontSize: 24, letterSpacing: 2 },
+    maxSpeed: { 
+      x: 905, 
+      y: 797, 
+      fontSize: 20, 
+      fontWeight: "700",
+      letterSpacing: 1,
+      fill: "#698b40",
+      textHeight: 200,
+      textWidth: 120
+    },
   },
   ktx: {
     src: "/static/photos/ktx_cab.png",
@@ -2274,6 +2284,33 @@ function buildCabOverlay(layoutKey) {
   speedTextNode.textContent = "0";
   svg.appendChild(speedTextNode);
 
+  // === 3.5) 최고 속도 숫자 텍스트 (n700s만 표시) ===
+  const maxSpeedConfig = CAB_LAYOUTS[layoutKey]?.maxSpeed;
+  if (maxSpeedConfig) {
+    const maxSpeedTextNode = document.createElementNS(svgNS, "text");
+    maxSpeedTextNode.setAttribute("id", "svgMaxSpeed");
+    maxSpeedTextNode.setAttribute("x", maxSpeedConfig.x);
+    maxSpeedTextNode.setAttribute("y", maxSpeedConfig.y);
+    maxSpeedTextNode.setAttribute("text-anchor", "end");
+    maxSpeedTextNode.setAttribute("fill", maxSpeedConfig.fill || "#00ff00");
+    maxSpeedTextNode.setAttribute(
+      "font-family",
+      `'Orbitron', system-ui, sans-serif`
+    );
+    maxSpeedTextNode.setAttribute("font-size", maxSpeedConfig.fontSize);
+    maxSpeedTextNode.setAttribute("letter-spacing", maxSpeedConfig.letterSpacing);
+    maxSpeedTextNode.setAttribute("font-weight", maxSpeedConfig.fontWeight || "700");
+    maxSpeedTextNode.textContent = "—";
+    svg.appendChild(maxSpeedTextNode);
+    
+    // 전역에 저장해서 updateInstrumentHUD에서 쓸 수 있게
+    window.__svgMaxSpeedElem = maxSpeedTextNode;
+    window.__svgMaxSpeedConfig = maxSpeedConfig;
+  } else {
+    window.__svgMaxSpeedElem = null;
+    window.__svgMaxSpeedConfig = null;
+  }
+
   // === 4) 속도계 바늘 (needle) ===
   if (needle) {
     const { img: nImg, width, height, cx, cy, px, py } = needle;
@@ -2493,7 +2530,7 @@ function buildCabOverlay(layoutKey) {
 }
 
 
-function updateInstrumentHUD({ speed }) {
+function updateInstrumentHUD({ speed, maxSpeed }) {
   const v = Number(speed ?? 0);
 
   // 1) 디지털 숫자
@@ -2502,15 +2539,25 @@ function updateInstrumentHUD({ speed }) {
     s.textContent = String(Math.round(v));
   }
 
+  // 1.5) 최고 속도 텍스트 (SVG)
+  const maxSpeedElem = window.__svgMaxSpeedElem;
+  if (maxSpeedElem) {
+    if (maxSpeed !== null && typeof maxSpeed === 'number') {
+      maxSpeedElem.textContent = String(Math.round(maxSpeed));
+    } else {
+      maxSpeedElem.textContent = "—";
+    }
+  }
+
   // 2) 아날로그 바늘 회전
   const needleGroup = window.__svgNeedleElem;
   const cfg = window.__svgNeedleConfig;
 
   if (needleGroup && cfg) {
-    const { minAngle, maxAngle, maxSpeed, cx, cy } = cfg;
+    const { minAngle, maxAngle, maxSpeed: cfgMaxSpeed, cx, cy } = cfg;
 
-    const clamped = Math.max(0, Math.min(maxSpeed, v));
-    const t = clamped / maxSpeed;
+    const clamped = Math.max(0, Math.min(cfgMaxSpeed, v));
+    const t = clamped / cfgMaxSpeed;
     const angle = minAngle + (maxAngle - minAngle) * t;
 
     needleGroup.setAttribute(
@@ -6259,9 +6306,8 @@ miniSpeed.innerHTML = `
 `;
 
 // 🔹 mini HUD – 최대 속도 (ATC > ATS)
+let maxSpeedDisplay = null;
 try {
-  let maxSpeedDisplay = null;
-  
   // Try ATC first (higher priority)
   if (window.__routeAtcData && Array.isArray(window.__routeAtcData)) {
     const remaining = st.remaining_m;
@@ -6285,7 +6331,11 @@ try {
     // Check if max speed changed and play bell if it did
     if (window.__lastMaxSpeed !== maxSpeedDisplay) {
       window.__lastMaxSpeed = maxSpeedDisplay;
-      playMaxSpeedBell();
+      // Don't play alarm for N700S trains
+      const vehicleName = window.vehicle?.name?.toLowerCase() || '';
+      if (!vehicleName.includes('n700s')) {
+        playMaxSpeedBell();
+      }
     }
   } else {
     miniMaxSpeed.textContent = '—';
@@ -6336,7 +6386,12 @@ try {
         // window.__isEBApplied = true;
         
         console.debug('ATS OVERSPEED TRIGGERED: EB engaged, alarm playing');
-        playAtsAlarm();
+        
+        // Don't play alarm for KTX or N700S trains
+        const vehicleName = window.vehicle?.name?.toLowerCase() || '';
+        if (!vehicleName.includes('ktx') && !vehicleName.includes('n700s')) {
+          playAtsAlarm();
+        }
         
         // Send EB command to server
         if (ws && ws.readyState === WebSocket.OPEN) {
@@ -6468,7 +6523,7 @@ if (miniNext && window.__routeStationNames && Array.isArray(window.__routeStatio
   else if (st.lever_notch === maxIdx) notchLabel = 'EB';
   else notchLabel = `B${st.lever_notch}`;
 
-  updateInstrumentHUD({ speed: vKmh, notch: notchLabel });
+  updateInstrumentHUD({ speed: vKmh, notch: notchLabel, maxSpeed: maxSpeedDisplay });
 if (window.drawMiniBrakeLadder) window.drawMiniBrakeLadder(st);
   if (window.updateInstrumentLadder) {
     try { window.updateInstrumentLadder(st); } catch(e) {}

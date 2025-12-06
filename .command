@@ -1,5 +1,5 @@
 git add .
-git commit -m "update atc logic"
+git commit -m "n700s atc update"
 git push origin main
 
 pip install fastapi uvicorn[standard]
