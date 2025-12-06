@@ -3989,10 +3989,16 @@ let bveSoundEngine = null;
  * layered WAV files based on speed, with smooth interpolation.
  */
 class BveSoundEngine {
-  constructor(ctx) {
+  constructor(ctx, trainType = '') {
     this.ctx = ctx;
     this.master = ctx.createGain();
-    this.master.gain.value = 2.0; // Master volume
+    
+    // Adjust master volume based on train type (KTX and N700S tend to be quieter)
+    let masterVolume = 2.0;
+    if (trainType && (trainType.toLowerCase().includes('ktx') || trainType.toLowerCase().includes('n700'))) {
+      masterVolume = 0.3; // bullet trains get lower volume
+    }
+    this.master.gain.value = masterVolume;
     this.master.connect(ctx.destination);
 
     // CSV tables: { speed -> { wavName -> value } }
@@ -4635,8 +4641,9 @@ class BveSoundEngine {
 /**
  * Initialize and load the BVE sound engine.
  * Call this once at startup.
+ * @param {string} trainType - Optional train type name to adjust master volume
  */
-async function initializeBveEngine() {
+async function initializeBveEngine(trainType = '') {
   const AC = window.AudioContext || window.webkitAudioContext;
   if (!AC) {
     console.warn("AudioContext not supported");
@@ -4651,7 +4658,7 @@ async function initializeBveEngine() {
   }
 
   if (!bveSoundEngine) {
-    bveSoundEngine = new BveSoundEngine(bveCtx);
+    bveSoundEngine = new BveSoundEngine(bveCtx, trainType);
 
     try {
       // Load CSV tables
@@ -5291,7 +5298,8 @@ async function startRun(){
     } catch (e) {}
 
     // 오디오 정책 해제 & BVE 준비
-    await initializeBveEngine().catch(err => console.debug("BVE init error:", err));
+    const trainType = (vehicle && vehicle.name) ? vehicle.name : '';
+    await initializeBveEngine(trainType).catch(err => console.debug("BVE init error:", err));
   } else {
     // If audio already loaded, ensure AudioContext resumed and skip showing loading screen
     try { if (bveCtx && bveCtx.state === 'suspended') await bveCtx.resume(); } catch (e) { console.debug('BVE: resume error', e); }
@@ -5707,6 +5715,32 @@ function resetOverspeedProtection() {
   window.__isEBApplied = false;
   stopAtsAlarm();
   console.debug('Overspeed protection reset');
+}
+
+// 🔔 Play a single bell sound (ats_p_bell2.wav) when max speed changes
+async function playMaxSpeedBell() {
+  try {
+    const audioContext = new (window.AudioContext || window.webkitAudioContext)();
+    if (audioContext.state === 'suspended') {
+      await audioContext.resume();
+    }
+
+    const response = await fetch('/static/E233/ExternalData/Sound/ATS/ats_p_bell2.wav');
+    const arrayBuffer = await response.arrayBuffer();
+    const audioBuffer = await audioContext.decodeAudioData(arrayBuffer);
+
+    const source = audioContext.createBufferSource();
+    source.buffer = audioBuffer;
+    
+    const gain = audioContext.createGain();
+    gain.gain.value = 0.7;
+    
+    source.connect(gain);
+    gain.connect(audioContext.destination);
+    source.start(0);
+  } catch (e) {
+    console.debug('Error playing max speed bell:', e);
+  }
 }
 
 /* ===== 모바일 터치 조작 ===== */
@@ -6247,8 +6281,15 @@ try {
   
   if (maxSpeedDisplay !== null && typeof maxSpeedDisplay === 'number') {
     miniMaxSpeed.innerHTML = `${maxSpeedDisplay} <span class="unit">km/h</span>`;
+    
+    // Check if max speed changed and play bell if it did
+    if (window.__lastMaxSpeed !== maxSpeedDisplay) {
+      window.__lastMaxSpeed = maxSpeedDisplay;
+      playMaxSpeedBell();
+    }
   } else {
     miniMaxSpeed.textContent = '—';
+    window.__lastMaxSpeed = null;
   }
 } catch (e) {
   miniMaxSpeed.textContent = '—';
