@@ -6399,7 +6399,7 @@ try {
 
         // Send EB command to server
         if (ws && ws.readyState === WebSocket.OPEN) {
-          sendCmd('setNotch', getEbIndex() - 5); // apply service brake (EB - 5)
+          sendCmd('setNotch', getEbIndex() - 1); // apply max service brake (EB - 1)
         }
       }
     } else {
