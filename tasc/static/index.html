@@ -2187,6 +2187,9 @@ function getCabLayoutKeyFromVehicle(filePath) {
 }
 
 function buildCabOverlay(layoutKey) {
+  // Store current layout key for later use (e.g., checking train type)
+  window.__currentCabLayoutKey = layoutKey;
+  
   const mount = document.getElementById("cab3d");
   if (!mount) {
     console.warn("buildCabOverlay: #cab3d not found");
@@ -6332,8 +6335,8 @@ try {
     if (window.__lastMaxSpeed !== maxSpeedDisplay) {
       window.__lastMaxSpeed = maxSpeedDisplay;
       // Don't play alarm for N700S trains
-      const vehicleName = window.vehicle?.name?.toLowerCase() || '';
-      if (!vehicleName.includes('n700s')) {
+      const layoutKey = window.__currentCabLayoutKey || '';
+      if (layoutKey !== 'n700s') {
         playMaxSpeedBell();
       }
     }
@@ -6387,12 +6390,12 @@ try {
         
         console.debug('ATS OVERSPEED TRIGGERED: EB engaged, alarm playing');
         
-        // Don't play alarm for KTX or N700S trains
-        const vehicleName = window.vehicle?.name?.toLowerCase() || '';
-        if (!vehicleName.includes('ktx') && !vehicleName.includes('n700s')) {
-          playAtsAlarm();
+      
+        const layoutKey = window.__currentCabLayoutKey || '';
+        if (layoutKey !== 'n700s' && layoutKey !== 'ktx') {
+            playAtsAlarm();
         }
-        
+
         // Send EB command to server
         if (ws && ws.readyState === WebSocket.OPEN) {
           sendCmd('setNotch', getEbIndex() - 1); // apply max service brake (EB - 1)

@@ -808,54 +808,83 @@ class StoppingSim:
         if lever_notch >= 0:
             return 0.0
 
-        # ------------------------
-        # 1) 물리 기반 모델이 가능한 경우
+# ------------------------
+        # 1) 물리 기반 모델 (Physics-based Model using kW & kN)
         # ------------------------
         if self.veh.T_max_kN > 0.0 and self.veh.P_max_kW > 0.0:
-            # notch 인덱스 (P1= -1, P2= -2 ...)
+            
+            # 1. 노치 인덱스 처리 (P1=0 ~ P13=12)
+            # n_forward가 13이 아니더라도 비율(Ratio) 기반이라 호환됨
             n_forward = len(self.veh.forward_notch_accels) or self.veh.forward_notches
-            n_forward = max(1, n_forward) # 0 나누기 방지
-            idx = -lever_notch - 1
+            n_forward = max(1, n_forward)
+            
+            idx = int(abs(lever_notch)) - 1
             idx = max(0, min(idx, n_forward - 1))
 
-            x = (idx + 1) / n_forward # 0~1 사이
-            gamma = 0.8 # 1보다 작으면 저단을 더 강하게 
-
-            # 고속열차(KTX/신칸센 등)에서만 적용하고 싶으면 조건 추가
-            if self.veh.maxSpeed_kmh >= 200: # 예: 200km/h 이상이면 고속열차 취급
-                notch_ratio = x ** gamma
+            # ------------------------------------------------------------------
+            # [Core] 13단 노치 파워 맵 (User Tuned: Strong Start)
+            # ------------------------------------------------------------------
+            # 님께서 원하셨던 "저단이어도 초반 토크는 확실하게(15% 시작)" 주는 맵입니다.
+            # 이 비율은 전체 T_max(최대토크)와 P_max(최대출력)를 얼마나 쓸지 결정합니다.
+            if self.veh.maxSpeed_kmh >= 200: # 고속열차 전용 맵
+                notch_table = [
+                    0.30, 0.38, 0.45,  # P1~P3: 초반 30%~45% (매우 강력함)
+                    0.51, 0.57, 0.63,  # P4~P6: 실용 가속
+                    0.69, 0.75, 0.81,  # P7~P9
+                    0.86, 0.91, 0.96, 1.00 # P10~P13
+                ]
+                # 인덱스 안전장치
+                current_ratio = notch_table[min(idx, len(notch_table)-1)]
             else:
-                notch_ratio = x
+                # 일반열차는 선형(Linear) 방식 유지
+                current_ratio = (idx + 1) / n_forward
 
-            # 단위 변환
-            P_max_W = self.veh.P_max_kW * 1000.0 # kW → W
-            T_max_N = self.veh.T_max_kN * 1000.0 # kN → N
 
-            # 속도 v[m/s]에서 풀 파워 견인력 F_full
-            v_safe = max(0.1, v)
-            v_cross = P_max_W / T_max_N # 출력제한 전환속도
+            # ------------------------------------------------------------------
+            # [Physics] 물리량 변환 및 제한 곡선 계산
+            # ------------------------------------------------------------------
+            P_max_W = self.veh.P_max_kW * 1000.0  # kW -> W
+            T_max_N = self.veh.T_max_kN * 1000.0  # kN -> N
+            mass_kg = self.veh.mass_kg
 
-            if v_safe < v_cross:
-                F_full = T_max_N # 저속: 견인력 제한
-            else:
-                F_full = P_max_W / v_safe # 고속: 출력 제한
+            v_safe = max(0.1, v) # 0 나누기 방지
 
-            # 현재 노치에 해당하는 실제 견인력
-            F_trac = notch_ratio * F_full
+            # 1. 이상적인 견인력 곡선 (Ideal Tractive Effort Curve)
+            # - 저속 구간: T_max_N (일정 토크, 등가속도 느낌)
+            # - 고속 구간: P_max_W / v (일정 출력, 속도 반비례 힘 감소)
+            # * 이 공식 자체가 "속도가 붙으면 지수적으로 힘이 약해지는" 현상을 완벽 구현함
+            F_theoretical = min(T_max_N, P_max_W / v_safe)
 
-            # 순수 "동력" 가속도 (저항/구배는 step()에서 따로 빠짐)
-            a_pwr = F_trac / self.veh.mass_kg # [m/s²]
+            # 2. 노치 비율 적용
+            # P1(0.15)이라도 저속에선 T_max가 크기 때문에 수 톤(ton)의 힘이 나옵니다.
+            # 반면 고속에선 F_theoretical 자체가 작아지므로 P1의 힘은 거의 0에 수렴합니다.
+            F_trac = F_theoretical * current_ratio
+
+            # 3. (Optional) 점착력(Adhesion) 제한 - 비현실적 미끄러짐 방지
+            # 고속열차는 비가 안 와도 고속에서 바퀴 마찰력이 줄어듭니다.
+            # 신칸센 표준 공식: mu = 13.6 / (85 + v_kmh)
+            v_kmh = v * 3.6
+            mu = 13.6 / (85 + v_kmh)
+            # 날씨 변수 등이 없으면 기본 1.0 가정, 비오면 0.8 곱하기 등 가능
+            F_adhesion = mu * mass_kg * 9.81 
             
-            # v_kmh = v * 3.6
-            # if v_kmh < 3.0: # 거의 정지 상태
-            #     idx = -lever_notch - 1 # P1=0, P2=1 ...
-            #     if idx == 0: # P1일 때만 (원하면 P2까지 포함 가능)
-            #         min_start_accel = 0.03 # m/s² 정도 (아주 느리게 출발)
-            #         if a_pwr < min_start_accel:
-            #             a_pwr = min_start_accel
+            # 최종 견인력은 "요구 힘"과 "바퀴 마찰 한계" 중 작은 값
+            F_final = min(F_trac, F_adhesion)
 
 
-            # a_max가 정의돼 있으면 상한으로 사용 (안전장치)
+            # ------------------------------------------------------------------
+            # [Output] 가속도 산출
+            # ------------------------------------------------------------------
+            a_pwr = F_final / mass_kg
+
+            # 거의 정지 상태(3km/h 미만)에서의 기동 보정
+            # 물리식 P/v 특성상 극저속에서 값이 튀는걸 막고 부드러운 출발 유도
+            if v_kmh < 3.0:
+                 # 저단 노치에서도 최소한의 기동 가속도는 보장 (0.05 m/s^2)
+                if idx >= 0: 
+                    a_pwr = max(a_pwr, 0.05 * current_ratio)
+
+            # 최대 가속도(승차감) 리미트
             if self.veh.a_max > 0:
                 a_pwr = min(a_pwr, self.veh.a_max)
 
@@ -1484,6 +1513,7 @@ class StoppingSim:
             "tasc_armed": getattr(self, "tasc_armed", False),
             "tasc_active": getattr(self, "tasc_active", False),
             "train_name": self.veh.name,
+            "maxSpeed_kmh": self.veh.maxSpeed_kmh,
 
             # HUD/디버그용 (업데이트된 Davis 확인 가능)
             "mu": float(self.scn.mu),
