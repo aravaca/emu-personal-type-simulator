@@ -2123,6 +2123,40 @@ const CAB_LAYOUTS = {
     ],
     speedText: { x: 865, y: 745, fontSize: 0, letterSpacing: 4 },
   },
+  s3000: {
+    src: "/static/photos/s3000_cab.png",
+    size: { width: 4320, height: 2744 },
+    windowPoly: [
+[
+[0, 0],
+[0, 1114],
+[816, 1361],
+[842, 1322],
+[1231, 1512],
+[3110, 1516],
+[3192, 1512],
+[3248, 1482],
+[3317, 1421],
+[3391, 1391],
+[3464, 1361],
+[4320, 1482],
+[4320, 0],
+
+],
+
+[
+
+
+],
+
+[
+
+
+],
+
+    ],
+    speedText: { x: 865, y: 745, fontSize: 0, letterSpacing: 4 },
+  },
   e721: {
     src: "/static/photos/e721_cab.png",
     size: { width: 1890, height: 1080 },
@@ -2181,6 +2215,7 @@ function getCabLayoutKeyFromVehicle(filePath) {
   if (lower.includes("e721")) return "e721";
   if (lower.includes("e233")) return "e233";
   if (lower.includes("e26")) return "ef510";
+  if (lower.includes("s3000")) return "s3000";
 
   // 필요하면 EF510, 서울 3000 등도 여기에 else-if로 추가
   return "default";
