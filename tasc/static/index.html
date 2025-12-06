@@ -6289,8 +6289,8 @@ try {
       
       const overspeedDuration = (Date.now() - window.__overspeedStartTime) / 1000; // seconds
       
-      // If overspeed for > 5 seconds and EB not yet applied, trigger EB
-      if (overspeedDuration > 5 && !window.__atsOverspeedTriggered) {
+      // If overspeed for > 1 seconds and EB not yet applied, trigger EB
+      if (overspeedDuration > 1 && !window.__atsOverspeedTriggered) {
         window.__atsOverspeedTriggered = true;
         // window.__isEBApplied = true;
         
