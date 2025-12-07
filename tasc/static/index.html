@@ -3413,15 +3413,26 @@ window.rebuildLeftPoles = rebuildLeftPoles;
 
   const wireGeo = new THREE.CylinderGeometry(wireRadius, wireRadius, wireLen, 8);
   const wireMat = new THREE.MeshBasicMaterial({ color: 0x000000 });
+  leftHeightOffset = 0.1;
+  rightHeightOffset = 0.2;
 
   // 1번 선로 위 전선 (x ≈ 0)
   const wire1 = new THREE.Mesh(wireGeo, wireMat);
-  wire1.position.set(0.5, wireY, wireZMid);
+  wire1.position.set(0.4, wireY + rightHeightOffset, wireZMid);
   wire1.rotation.x = Math.PI / 2; // 기본이 Y축 방향이라 Z축으로 눕힘
   wire1.castShadow = false;
   scene.add(wire1);
 
-  leftHeightOffset = 0.1;
+  poleOffset = 0.7
+  // 3번 선로 위 전선 (x ≈ 0)
+  const wire3 = new THREE.Mesh(wireGeo, wireMat);
+  wire3.position.set(0.4, wireY - poleOffset + rightHeightOffset, wireZMid);
+  wire3.rotation.x = Math.PI / 2; // 기본이 Y축 방향이라 Z축으로 눕힘
+  wire3.castShadow = false;
+  scene.add(wire3);
+
+///////////////////
+
   // 2번 선로 위 전선 (x ≈ 4)
   const wire2 = new THREE.Mesh(wireGeo, wireMat);
   wire2.position.set(3.4, wireY + leftHeightOffset + 0.2, wireZMid);
@@ -3429,13 +3440,6 @@ window.rebuildLeftPoles = rebuildLeftPoles;
   wire2.castShadow = false;
   scene.add(wire2);
 
-  poleOffset = 0.7
-  // 3번 선로 위 전선 (x ≈ 0)
-  const wire3 = new THREE.Mesh(wireGeo, wireMat);
-  wire3.position.set(0.5, wireY - poleOffset, wireZMid);
-  wire3.rotation.x = Math.PI / 2; // 기본이 Y축 방향이라 Z축으로 눕힘
-  wire3.castShadow = false;
-  scene.add(wire3);
 
   // 4번 선로 위 전선 (x ≈ 4)
   const wire4 = new THREE.Mesh(wireGeo, wireMat);
@@ -3931,7 +3935,7 @@ const angle = (lowerName.includes('ktx') || lowerName.includes('999'))
 
 
 // 카메라를 살짝 왼쪽으로 이동시키고, 살짝 아래쪽을 바라보게 설정
-const xOffset = (lowerName.includes('seoul'))? 0.9: 0.9;  // 카메라를 왼쪽으로 1.5 단위 이동
+const xOffset = (lowerName.includes('seoul'))? 0: 0.9;  // 카메라를 왼쪽으로 1.5 단위 이동
 const yOffset = y - angle; // 기존보다 살짝 더 아래쪽을 바라보도록 설정
 const zOffset = z + 4.0;  // 기존 z에 조정값 추가
 
