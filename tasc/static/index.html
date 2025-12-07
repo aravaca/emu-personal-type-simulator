@@ -1768,12 +1768,12 @@ function getAtcMaxSpeed(remaining_m) {
           <select id="trainFamily" class="form-input">
             <option value="E233" selected>E233계</option>
             <option value="E235">E235계</option>
-            <!-- <option value="E721">E721계</option> -->
-            <option value="3000">서울교통공사 3000호대 VVVF 전동차</option>
             <option value="N700S">신칸센 N700S계</option> 
+            <option value="3000">서울교통공사 3000호대 VVVF 전동차</option>
             <option value="100000">한국철도공사 100000호대 전동차</option> 
-            <option value="EF510">EF510형 전기기관차 + E26계 객차</option> 
-            <option value="GE999">초차원기관 보일러 GR-0999-SV</option> 
+            <!-- <option value="E721">E721계</option> -->
+            <!-- <option value="EF510">EF510형 전기기관차 + E26계 객차</option>  -->
+            <!-- <option value="GE999">초차원기관 보일러 GR-0999-SV</option>  -->
           </select>
         </label>
 
@@ -1935,31 +1935,51 @@ function getAtcMaxSpeed(remaining_m) {
 const CAB_LAYOUTS = {
   default: {
     src: "/static/photos/cab.png", // TODO: 실제 경로로 수정
-    size: { width: 1884, height: 1080 }, // TODO: PNG 원본 해상도
+    size: { width: 1920, height: 1080 }, // TODO: PNG 원본 해상도
     windowPoly: [
-      [301, 623],
-      [197, 0],
-      [1884, 0],
-      [1884, 623],
+      [
+[534, 150], [550, 741], [712, 740], [596, 567], [584, 568], [581, 674], [575, 670], [575, 590], 
+[571, 400], [571, 388], [570, 318], [572, 325], [586, 488], [594, 485], [597, 560], [603, 572], 
+[721, 741], [879, 742], [1028, 742], [1181, 742], [1383, 742], [1497, 740], [1562, 741], 
+[1640, 740], [1740, 738], [1847, 738], [1920, 735], [1920, 150]
+  ],
+  [
+    [0, 534], [24, 533], [26, 547], [45, 550], [46, 567], [69, 565], [63, 582], [56, 595], 
+[56, 607], [63, 616], [83, 622], [103, 623], [115, 623], [126, 621], [139, 613], [156, 607], 
+[172, 784], [173, 832], [166, 859], [150, 892], [140, 913], [123, 930], [93, 947], [57, 970], 
+[26, 989], [0, 1004]
+
+  ],
+  [
+    [0, 357], [8, 357], [7, 274], [25, 272], [39, 272], [89, 280], [88, 232], [67, 214], 
+[49, 210], [0, 200]
+
+  ],
+  [
+    [75, 589], [98, 577], [122, 567], [148, 561], [157, 563], [154, 579], [150, 592], [134, 602], 
+[125, 609], [105, 612], [87, 613], [77, 607], [70, 594]
+
+  ]
+
     ],
-    speedText: { x: 545, y: 1020, fontSize: 40, letterSpacing: 3 },
+    speedText: { x: 710, y: 1011, fontSize: 20, letterSpacing: 3, color: '#000000', fontWeight: '700' },
     
     needle: {
-      img: "/static/photos/needle.png", // 바늘 PNG 경로
-      width: 75, // SVG 안에서 바늘 크기
-      height: 45.23,
+      img: "/static/photos/black_needle.png", // 바늘 PNG 경로
+      width: 40, // SVG 안에서 바늘 크기
+      height: 52.04,
 
       // cab.png 기준 계기판 중심 (임시 값)
-      cx: 517,
-      cy: 957,
+      cx: 698,
+      cy: 964,
 
       // needle.png 안에서 바늘 축 위치 (임시 값: 이미지 중앙)
-      px: 62.86,
-      py: 33.82,
+      px: 7.511,
+      py: 43.039,
 
       // 회전 범위 + 풀스케일 속도
-      minAngle: -60, // 0 km/h일 때 각도
-      maxAngle: 190, // maxSpeed일 때 각도
+      minAngle: -161, // 0 km/h일 때 각도
+      maxAngle: 95, // maxSpeed일 때 각도
       maxSpeed: 140 // 계기판 끝속도
     },
   },
@@ -2286,14 +2306,14 @@ function buildCabOverlay(layoutKey) {
   speedTextNode.setAttribute("x", spCfg.x);
   speedTextNode.setAttribute("y", spCfg.y);
   speedTextNode.setAttribute("text-anchor", "end");
-  speedTextNode.setAttribute("fill", "#eaffff");
+  speedTextNode.setAttribute("fill", spCfg.color || "#eaffff");
   speedTextNode.setAttribute(
     "font-family",
     `'Orbitron', system-ui, sans-serif`
   );
   speedTextNode.setAttribute("font-size", spCfg.fontSize);
   speedTextNode.setAttribute("letter-spacing", spCfg.letterSpacing);
-  speedTextNode.setAttribute("font-weight", "700");
+  speedTextNode.setAttribute("font-weight", spCfg.fontWeight || "700");
   speedTextNode.setAttribute("font-style", "italic");
   speedTextNode.textContent = "0";
   svg.appendChild(speedTextNode);
@@ -2360,10 +2380,10 @@ function buildCabOverlay(layoutKey) {
     // 혹시 예전 캔버스 버전이 남아있다면 비활성화
     window.drawMiniBrakeLadder = undefined;
 
-    let ladderX = CAB_W - 1640; // 오른쪽에서 살짝 안쪽
-    let ladderY = CAB_H - 203; // 아래에서 조금 위
+    let ladderX = CAB_W - 1458; // 오른쪽에서 살짝 안쪽
+    let ladderY = CAB_H - 193; // 아래에서 조금 위
     let ladderW = 34;
-    let ladderH = 155;
+    let ladderH = 125;
 
     if (vehicle.name.toLowerCase().includes("e233")) {
       // E233 차량일 경우 다른 값 적용
@@ -2382,7 +2402,7 @@ function buildCabOverlay(layoutKey) {
     bg.setAttribute("rx", "4");
     bg.setAttribute("ry", "4");
     bg.setAttribute("fill", "rgba(0,0,0,0.40)");
-    if (!vehicle.name.toLowerCase().includes("e233")) {
+    if (!vehicle.name.toLowerCase().includes("e233") && !vehicle.name.toLowerCase().includes("e235")) {
     svg.appendChild(bg);
     }
     
@@ -2412,6 +2432,14 @@ function buildCabOverlay(layoutKey) {
     const x = ladderX + pad;
     if (vehicle.name.toLowerCase().includes("e233")) {
       const rotateAngle = 3; // 원하는 각도 (예: 10도)
+      const centerX = ladderX + ladderW / 2; // 회전 중심 X
+      const centerY = ladderY + ladderH / 2; // 회전 중심 Y
+
+      // ladderGroup에 회전 transform 추가
+      ladderGroup.setAttribute("transform", `rotate(${rotateAngle} ${centerX} ${centerY})`);
+    }
+    if (vehicle.name.toLowerCase().includes("e235")) {
+      const rotateAngle = 15; // 원하는 각도 (예: 10도)
       const centerX = ladderX + ladderW / 2; // 회전 중심 X
       const centerY = ladderY + ladderH / 2; // 회전 중심 Y
 
@@ -3930,7 +3958,7 @@ const angle = (lowerName.includes('ktx') || lowerName.includes('999'))
   ? 0.5
   : (lowerName.includes('n700s') || lowerName.includes('e26'))
     ? 0.6
-    : lowerName.includes('e233')
+    : lowerName.includes('e233') || lowerName.includes('e235') 
     ? 0.4 : 0.8; //the rest, including n700s
 
 
