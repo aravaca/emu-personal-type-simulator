@@ -4753,11 +4753,17 @@ async function initializeBveEngine(trainType = '') {
       // Also load door sound separately (correct path)
       await bveSoundEngine.loadDoorSound("/static/E233/OriginalData/Sound/Door/DoorOpen1.wav");
       
-      // Also load door close sound
-      await bveSoundEngine.loadDoorCloseSound("/static/E233/OriginalData/Sound/Door/DoorClose1.wav");
+      // Load door close sound - select based on current train layout
+      const doorClosePath = (window.__currentCabLayoutKey === 's3000')
+        ? "/static/E233/OriginalData/Sound/Door/korail_doorclose.wav"
+        : "/static/E233/OriginalData/Sound/Door/DoorClose1.wav";
+      await bveSoundEngine.loadDoorCloseSound(doorClosePath);
 
-      // Also load a default horn (HornB) for H key playback
-      await bveSoundEngine.loadHornSound("/static/E233/ExternalData/Sound/Horn/HornB.wav");
+      // Load horn sound - select based on current train layout
+      const hornPath = (window.__currentCabLayoutKey === 'n700s' || window.__currentCabLayoutKey === 'ktx')
+        ? "/static/E233/ExternalData/Sound/Horn/HornD.wav"
+        : "/static/E233/ExternalData/Sound/Horn/HornB.wav";
+      await bveSoundEngine.loadHornSound(hornPath);
 
       // Load air-down sounds used for brake transitions
       await loadAirSounds();
