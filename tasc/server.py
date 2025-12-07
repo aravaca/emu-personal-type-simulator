@@ -591,13 +591,13 @@ class StoppingSim:
         name = cmd["name"]
         val = cmd["val"]
 
-        # ▼ TASC가 'active'인 상태에서 수동 개입이 들어오면 즉시 TASC를 OFF
-        if self.tasc_enabled and self.tasc_active and name in ("emergencyBrake"):
-            self.tasc_enabled = False
-            self.tasc_active = False
-            self.tasc_armed = False
-            if DEBUG:
-                print("[TASC] manual intervention while ACTIVE -> TASC OFF")
+        # # ▼ TASC가 'active'인 상태에서 수동 개입이 들어오면 즉시 TASC를 OFF
+        # if self.tasc_enabled and self.tasc_active and name in ("emergencyBrake"):
+        #     self.tasc_enabled = False
+        #     self.tasc_active = False
+        #     self.tasc_armed = False
+        #     if DEBUG:
+        #         print("[TASC] manual intervention while ACTIVE -> TASC OFF")
 
         # ▼ 이하 기존 로직(lever_notch 직접 조작) 유지
         if name == "stepNotch":
@@ -1174,7 +1174,7 @@ class StoppingSim:
         if self.tasc_enabled and not st.finished:
             dwell_ok = (st.t - self._tasc_last_change_t) >= self.tasc_hold_min_s
             rem_now = self.scn.L - st.s
-            cur = st.lever_notch
+            cur = st.internal_notch
             max_normal_notch = self.veh.notches - 2
 
             if self.tasc_armed and not self.tasc_active:
@@ -1194,16 +1194,16 @@ class StoppingSim:
                     if self._tasc_phase == "build":
                         if cur < max_normal_notch and s_cur > (rem_now - self.tasc_deadband_m):
                             if dwell_ok:
-                                st.lever_notch = self._clamp_notch(cur + 1)
+                                st.internal_notch = self._clamp_notch(cur + 1)
                                 self._tasc_last_change_t = st.t
-                                self._tasc_peak_notch = max(self._tasc_peak_notch, st.lever_notch)
+                                self._tasc_peak_notch = max(self._tasc_peak_notch, st.internal_notch)
                                 changed = True
                         else:
                             self._tasc_phase = "relax"
                     if self._tasc_phase == "relax" and not changed:
                         # if cur > 1 and s_dn <= (rem_now + self.tasc_deadband_m):
                         #     if dwell_ok:
-                        #         st.lever_notch = self._clamp_notch(cur - 1)
+                        #         st.internal_notch = self._clamp_notch(cur - 1)
                         #         self._tasc_last_change_t = st.t
                         if cur > 1:
                             target_notch = cur - 1
@@ -1215,19 +1215,19 @@ class StoppingSim:
                                 relax_allowed = (s_dn <= (rem_now + self.tasc_deadband_m - margin))
                                 time_since_change = st.t - self._tasc_last_change_t
                                 if relax_allowed and dwell_ok and (time_since_change >= self.tasc_relax_hold_s):
-                                    st.lever_notch = self._clamp_notch(target_notch)
+                                    st.internal_notch = self._clamp_notch(target_notch)
                                     self._tasc_last_change_t = st.t
                             else:
                                 # 목표 노치가 3 이하(3,2,1 등)면 기존 즉시 완화 규칙 유지
                                 if s_dn <= (rem_now + self.tasc_deadband_m) and dwell_ok:
-                                    st.lever_notch = self._clamp_notch(target_notch)
+                                    st.internal_notch = self._clamp_notch(target_notch)
                                     self._tasc_last_change_t = st.t
         # ---------- Dynamics ----------
 
         # internal_notch가 더 높으면 그것을 사용
         effective_notch = max(st.lever_notch, st.internal_notch)
         
-        pwr_accel = self.compute_power_accel(st.lever_notch, st.v) # 동력 가속도
+        pwr_accel = self.compute_power_accel(effective_notch, st.v) # 동력 가속도
 
         a_cmd_brake = self._effective_brake_accel(effective_notch, st.v) # 제동 가속도 명령
         is_eb = (effective_notch == self.veh.notches - 1) # 비상제동 여부
