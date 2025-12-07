@@ -6512,6 +6512,7 @@ try {
         // Send EB command to server
         if (ws && ws.readyState === WebSocket.OPEN) {
           sendCmd('setInternalNotch', 4); // apply max service brake (EB - 1)
+          sendCmd('atcOverspeed', 1); // apply max service brake (EB - 1)
         }
       }
     } else {
@@ -6528,6 +6529,7 @@ try {
       resetOverspeedProtection();
         if (ws && ws.readyState === WebSocket.OPEN) {
           sendCmd('setInternalNotch', 0); // release brakes
+          sendCmd('atcOverspeed', 0); // clear overspeed flag
         }
     }
   }

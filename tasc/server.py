@@ -159,6 +159,7 @@ class State:
     a: float = 0.0
     lever_notch: int = 0
     internal_notch: int = 0
+    atc_overspeed: bool = False
     finished: bool = False
     stop_error_m: Optional[float] = None
     residual_speed_kmh: Optional[float] = None
@@ -537,6 +538,9 @@ class StoppingSim:
         #     cmd = {"t": self.state.t, "name": name, "val": val}
         #     self._apply_command(cmd)
         #     return
+        if name == "atcOverspeed":
+            self.state.atc_overspeed = bool(val)
+            return
 
         if name == "emergencyBrake":
             # Apply immediately
@@ -783,19 +787,19 @@ class StoppingSim:
                 # B. 출력 비율 (고속 뒷심): 저단은 급격하게 낮춤
                 # P1은 30% 토크로 시작하지만, 출력은 2%로 제한 -> 30~40km/h만 넘어도 힘이 빠짐
                 # P7은 69% 토크지만, 출력은 45%로 제한 -> 150~180km/h 부근에서 힘이 빠짐
-                power_table = [
-                    0.02, 0.05, 0.10,  # P1~P3: 고속 주행 불가 (입환/저속용)
-                    0.18, 0.25, 0.35,  # P4~P6: 중저속용
-                    0.45, 0.55, 0.65,  # P7~P9: 200km/h 넘어가면 힘이 부족해짐
-                    0.75, 0.85, 0.95, 1.00 # P10~P13: 초고속 영역용
-                ]
-
                 # power_table = [
-                #     0.10, 0.16, 0.24, # P1~P3 : 저속에서 출력은 제한적이지만 현실적으로 더 크게
-                #     0.34, 0.45, 0.58, # P4~P6 : 중저속 구간에 힘 보강
-                #     0.70, 0.80, 0.88, # P7~P9
-                #     0.94, 0.98, 0.995, 1.00 # P10~P13 : 최상단
+                #     0.02, 0.05, 0.10,  # P1~P3: 고속 주행 불가 (입환/저속용)
+                #     0.18, 0.25, 0.35,  # P4~P6: 중저속용
+                #     0.45, 0.55, 0.65,  # P7~P9: 200km/h 넘어가면 힘이 부족해짐
+                #     0.75, 0.85, 0.95, 1.00 # P10~P13: 초고속 영역용
                 # ]
+
+                power_table = [
+                    0.10, 0.16, 0.24, # P1~P3 : 저속에서 출력은 제한적이지만 현실적으로 더 크게
+                    0.34, 0.45, 0.58, # P4~P6 : 중저속 구간에 힘 보강
+                    0.70, 0.80, 0.88, # P7~P9
+                    0.94, 0.98, 0.995, 1.00 # P10~P13 : 최상단
+                ]
 
                 # power_table = [
                 # # [저속/입환 영역] - 아주 미세함
@@ -1227,7 +1231,7 @@ class StoppingSim:
         # internal_notch가 더 높으면 그것을 사용
         effective_notch = max(st.lever_notch, st.internal_notch)
         
-        pwr_accel = self.compute_power_accel(effective_notch, st.v) # 동력 가속도
+        pwr_accel = self.compute_power_accel(effective_notch, st.v) if self.state.atc_overspeed else self.compute_power_accel(st.lever_notch, st.v) # 동력 가속도
 
         a_cmd_brake = self._effective_brake_accel(effective_notch, st.v) # 제동 가속도 명령
         is_eb = (effective_notch == self.veh.notches - 1) # 비상제동 여부
@@ -1740,6 +1744,9 @@ async def ws_endpoint(ws: WebSocket):
                 elif name == "setInternalNotch":
                     val = payload.get("val", payload.get("delta", payload.get("value", 0)))
                     sim.queue_command("setInternalNotch", val)
+                elif name == "atcOverspeed":
+                    val = payload.get("val", payload.get("delta", payload.get("value", 0)))
+                    sim.queue_command("atcOverspeed", val)
 
                 elif name == "setTrainLength":
                     length = int(payload.get("length", 8))
