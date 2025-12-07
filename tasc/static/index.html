@@ -5902,10 +5902,10 @@ addEventListener("keydown", (e) => {
   if(e.repeat) return;
 
   // 🔴 Block all user input if ATS overspeed protection is active
-  if (window.__atsOverspeedTriggered) {
-    console.debug('User input blocked - ATS overspeed protection active');
-    return;
-  }
+  // if (window.__atsOverspeedTriggered) {
+  //   console.debug('User input blocked - ATS overspeed protection active');
+  //   return;
+  // }
 
   if (e.key === " ") {
     // Check state before taking action
@@ -6497,7 +6497,7 @@ try {
       // Only trigger when Random mode is on
       const rndEl = document.getElementById('rndToggle');
       const isRandomMode = rndEl && rndEl.checked;
-      if (overspeedDuration > 1 && !window.__atsOverspeedTriggered && st.lever_notch <= 0 && isRandomMode) {
+      if (overspeedDuration > 0 && !window.__atsOverspeedTriggered && isRandomMode) {
         window.__atsOverspeedTriggered = true;
         // window.__isEBApplied = true;
         
@@ -6511,7 +6511,7 @@ try {
 
         // Send EB command to server
         if (ws && ws.readyState === WebSocket.OPEN) {
-          sendCmd('setNotch', getEbIndex() - 1); // apply max service brake (EB - 1)
+          sendCmd('setInternalNotch', 4); // apply max service brake (EB - 1)
         }
       }
     } else {
@@ -6527,7 +6527,7 @@ try {
       console.debug('Train stopped after overspeed - resetting ATS protection');
       resetOverspeedProtection();
         if (ws && ws.readyState === WebSocket.OPEN) {
-          sendCmd('setNotch', 0); // release brakes
+          sendCmd('setInternalNotch', 0); // release brakes
         }
     }
   }

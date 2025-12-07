@@ -158,6 +158,7 @@ class State:
     v: float = 0.0
     a: float = 0.0
     lever_notch: int = 0
+    internal_notch: int = 0
     finished: bool = False
     stop_error_m: Optional[float] = None
     residual_speed_kmh: Optional[float] = None
@@ -200,7 +201,7 @@ class StoppingSim:
 
         self.veh = veh
         self.scn = scn
-        self.state = State(t=0.0, s=0.0, v=scn.v0, a=0.0, lever_notch=0, finished=False)
+        self.state = State(t=0.0, s=0.0, v=scn.v0, a=0.0, lever_notch=0, internal_notch=0, finished=False)
         self.running = False
         self.random_mode = False  # Flag to control game-over behavior in Random Scenario mode
         self.final_notch_on_finish = 0  # Store notch when simulation finishes for random mode reload
@@ -437,48 +438,7 @@ class StoppingSim:
         # C) 그 외엔 공식 기반
         return self._formula_time(v0_kmh, L_m)
 
-    # ----------------- Physics helpers -----------------
-
-    # def _effective_brake_accel(self, notch: int, v: float) -> float:
-    #     if notch >= len(self.veh.notch_accels):
-    #         return 0.0
-    #     if notch >= 0:
-    #         base = float(self.veh.notch_accels[notch])  # 브레이크
-    #     else:
-    #         idx = -notch - 1
-    #         base = float(self.veh.forward_notch_accels[idx])  # 전진 notch
-    #     k_srv = 0.85
-    #     k_eb = 0.98
-    #     is_eb = (notch == (self.veh.notches - 1))
-    #     k_adh = k_eb if is_eb else k_srv
-    #     a_cap = -k_adh * float(self.scn.mu) * 9.81
-    #     a_eff = max(base, a_cap)
-    #     if a_eff <= a_cap + 1e-6:
-    #         scale = 0.90 if v > 8.0 else 0.85
-    #         a_eff = a_cap * scale
-    #     return a_eff
-
-    # def _effective_brake_accel(self, notch: int, v: float) -> float:
-    #     #  악셀(음수) 또는 N(0)에서는 '브레이크 없음'
-    #     if notch <= 0:
-    #         return 0.0
-
-    #     if notch >= len(self.veh.notch_accels):
-    #         return 0.0
-
-    #     base = float(self.veh.notch_accels[notch]) # 음수여야 정상(제동)
-    #     k_srv = 0.85
-    #     k_eb = 0.98
-    #     is_eb = (notch == self.veh.notches - 1)
-    #     k_adh = k_eb if is_eb else k_srv
-    #     a_cap = -k_adh * float(self.scn.mu) * 9.81 # 음수
-
-    #     a_eff = max(base, a_cap)
-    #     if a_eff <= a_cap + 1e-6:
-    #         scale = 0.90 if v > 8.0 else 0.85
-    #         a_eff = a_cap * scale
-    #     return a_eff
-
+ 
     def _effective_brake_accel(self, notch: int, v: float) -> float:
         #  악셀(음수) 또는 N(0)에서는 '브레이크 없음'
         if notch <= 0:
@@ -487,32 +447,8 @@ class StoppingSim:
         if notch >= len(self.veh.notch_accels):
             return 0.0
 
-        v_kmh = v * 3.6
-
         # 기본 제동 가속도(음수)
         base = float(self.veh.notch_accels[notch]) # 음수여야 정상(제동)
-    
-        # 저속(<=10 km/h)에서는 마찰/밸브 한계로 제동력이 감소 (0.8~1.0 범위)
-        # 저속에서 제동력 계수 적용 (12->8km/h 구간 선형, 8km/h 이하 0.90, <=3km/h는 0.85)
-        # 기본 factor 계산
-        # if v_kmh >= air_brake_vi:
-        #     factor = 1.0
-        # elif v_kmh > 8.0:
-        #     # 8~air_brake_vi km/h 사이 선형 보간 (8→0.95, air_brake_vi→1.0)
-        #     factor = 0.95 + (v_kmh - 8.0) * 0.05 / max(1e-6, (air_brake_vi - 8.0))
-        # elif v_kmh > 5.0:
-        #     factor = 0.95
-        # else:
-        #     # 5km/h 이하
-        #     factor = 1.0 if notch == 1 else 0.90  # B1은 특별히 더 낮게, 0.75혹은 0.8이 딱 좋다..
-
-        # # base 보정
-        # if notch == 1 and v_kmh <= 5.0:
-        #     base = min(base * factor, -0.125)  # 지나친 미끄럼 방지 위해 최소 제동력을 -0.125로 클램핑
-        # else:
-        #     base *= factor
-        # base *= factor
-
         k_srv = 0.85
         k_eb = 0.98
         is_eb = (notch == self.veh.notches - 1)
@@ -582,7 +518,7 @@ class StoppingSim:
             return min(a_demand, 0.8 * a_cap)
 
     # ----------------- Controls -----------------
-
+    # safe-guard for notch limits
     def _clamp_notch(self, n: int) -> int:
         # forward_notches 길이만큼 음수 허용
         min_notch = -len(self.veh.forward_notch_accels)  # 예: -2
@@ -596,6 +532,12 @@ class StoppingSim:
         # shortcut the brake filter by setting brake split and
         # _a_cmd_filt to the commanded brake so the strong brake
         # takes effect without waiting tau_brk.
+        # if name == "setInternalNotch":
+        #     # Internal notch changes are immediate and do not queue
+        #     cmd = {"t": self.state.t, "name": name, "val": val}
+        #     self._apply_command(cmd)
+        #     return
+
         if name == "emergencyBrake":
             # Apply immediately
             cmd = {"t": self.state.t, "name": name, "val": val}
@@ -671,6 +613,8 @@ class StoppingSim:
                 self.eb_used = True
         elif name == "setNotch":
             st.lever_notch = self._clamp_notch(val)
+        elif name == "setInternalNotch":
+            st.internal_notch = self._clamp_notch(val)
 
         # When a forward notch is applied while stopped, compute and apply the proper
         # acceleration immediately so the filter is initialized correctly for smooth
@@ -1280,39 +1224,30 @@ class StoppingSim:
                                     self._tasc_last_change_t = st.t
         # ---------- Dynamics ----------
 
-                
-        pwr_accel = self.compute_power_accel(st.lever_notch, st.v)
+        # internal_notch가 더 높으면 그것을 사용
+        effective_notch = max(st.lever_notch, st.internal_notch)
+        
+        pwr_accel = self.compute_power_accel(st.lever_notch, st.v) # 동력 가속도
 
+        a_cmd_brake = self._effective_brake_accel(effective_notch, st.v) # 제동 가속도 명령
+        is_eb = (effective_notch == self.veh.notches - 1) # 비상제동 여부
+        self._update_brake_dyn_split(a_cmd_brake, st.v, is_eb, dt) # 제동 동역학 업데이트
+        a_brake = self._wsp_update(st.v, self.brk_accel, dt) # 제동 가속도 (WSP 포함)
+        a_grade = self._grade_accel() # 경사 가속도
+        a_davis = self._davis_accel(st.v) # 데이비스 항력 가속도
 
-        a_cmd_brake = self._effective_brake_accel(st.lever_notch, st.v)
-        is_eb = (st.lever_notch == self.veh.notches - 1)
-        self._update_brake_dyn_split(a_cmd_brake, st.v, is_eb, dt)
-        a_brake = self._wsp_update(st.v, self.brk_accel, dt)
-
-        a_grade = self._grade_accel()
-        a_davis = self._davis_accel(st.v)
-
-        a_target = pwr_accel + a_brake + a_grade + a_davis
-
-
-        # if st.lever_notch < 0 and st.v * 3.6 < 0.5:
-        # # 고속/중량 차량에서도 체감되는 출발 가속도 (튜닝 포인트)
-        #     min_start_accel = 0.15 # m/s² 정도 추천 (0.1~0.2 사이에서 조절)
-
-        #     if a_target < min_start_accel:
-        #         a_target = min_start_accel
-
+        a_target = pwr_accel + a_brake + a_grade + a_davis # 최종 목표 가속도
 
         rem_now = self.scn.L - st.s
         v_kmh = st.v * 3.6
 
-        if st.lever_notch >= 1:
+        if effective_notch >= 1:
             a_target = min(a_target, 0.0)
 
         self._a_cmd_filt += (a_target - self._a_cmd_filt) * (dt / max(1e-6, self.veh.tau_brk))        
 
         max_da = self.veh.j_max * dt
-        if v_kmh <= 5.0 and st.lever_notch >= 1:
+        if v_kmh <= 5.0 and effective_notch >= 1:
             scale = 0.25 + 0.75 * (v_kmh / 5.0)
             max_da *= scale
 
@@ -1802,8 +1737,9 @@ async def ws_endpoint(ws: WebSocket):
     # 'val'이나 'delta'에 상관없이 value가 있다면 우선
                     val = payload.get("val", payload.get("delta", payload.get("value", 0)))
                     sim.queue_command("setNotch", val)
-
-
+                elif name == "setInternalNotch":
+                    val = payload.get("val", payload.get("delta", payload.get("value", 0)))
+                    sim.queue_command("setInternalNotch", val)
 
                 elif name == "setTrainLength":
                     length = int(payload.get("length", 8))

@@ -1,5 +1,5 @@
 git add .
-git commit -m "update e235"
+git commit -m "add internal notch logic"
 git push origin main
 
 pip install fastapi uvicorn[standard]
