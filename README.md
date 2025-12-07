@@ -17,6 +17,7 @@ Supports:
 - **TASC-assisted automatic stopping**
 - **Emergency** scenarios including obstacles on track and rail suicides.
 - **Brake navigation** to explore efficient brake profiles
+- EMU Rolling Stock with Accurate Real-World and Performance Data
 - Real-world Time-Space diagrams in Drive Mode
 - VVVF sounds based on velocity-based pitch modulation 
 - ATC, an automatic railway safety system crucial to modern EMUs
