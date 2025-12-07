@@ -19,7 +19,7 @@ Supports:
 - **Brake navigation** to explore efficient brake profiles
 - Real-world Time-Space diagrams in Drive Mode
 - VVVF sounds based on velocity-based pitch modulation 
-- Safety systems, such as ATS 
+- ATC, an automatic railway safety system crucial to modern EMUs
 
 Powered by **Three.js 3D visualization**, the simulator delivers an immersive driver’s POV and realistic track environment.  
 Real-time **velocity–distance** and **braking curve** rendering provides intuitive, instant feedback.
