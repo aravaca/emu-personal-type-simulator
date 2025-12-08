@@ -3296,16 +3296,17 @@ function createTrackCanvasTexture() {
   const railGeo = new THREE.BoxGeometry(railW, railH, railLen);
   const railL = new THREE.Mesh(railGeo, railMat);
   const railR = new THREE.Mesh(railGeo, railMat);
-  railL.position.set(-0.535, railH/2 + 0.1, 200); //지상으로 부터 10cm 띄워서 텍스처의 겹침현상 방지
-  railR.position.set( 0.535, railH/2 + 0.1, 200);
+  const s = 0.5335; // narrow gauge 기준 레일 간격 절반
+  railL.position.set(-s, railH/2 + 0.1, 200); //지상으로 부터 10cm 띄워서 텍스처의 겹침현상 방지
+  railR.position.set( s, railH/2 + 0.1, 200);
   railL.castShadow = false; railL.receiveShadow = false;
   railR.castShadow = false; railR.receiveShadow = false;
   scene.add(railL, railR);
   
   const railL2 = new THREE.Mesh(railGeo, railMat);
   const railR2 = new THREE.Mesh(railGeo, railMat);
-  railL2.position.set(-0.535+4, railH/2 + 0.1, 200);
-  railR2.position.set( 0.535+4, railH/2 + 0.1, 200);
+  railL2.position.set(-s+4, railH/2 + 0.1, 200);
+  railR2.position.set( s+4, railH/2 + 0.1, 200);
   railL2.castShadow = false; railL2.receiveShadow = false;
   railR2.castShadow = false; railR2.receiveShadow = false;
   scene.add(railL2, railR2);
