@@ -867,25 +867,109 @@ class StoppingSim:
             # [Adhesion & Finalize] 점착 및 보정
             # ------------------------------------------------------------------
             v_kmh = v * 3.6
-            
-            # # 점착력 제한 (고속 슬립 방지)
-            # mu = 13.6 / (85 + v_kmh)
-            # F_adhesion = mu * mass_kg * 9.81 
-            
-            F_final = F_physics
+        # ------------------------------------------------------------------
+        # [Speed Cap] 노치별 속도 한계 (여기가 핵심!)
+        # ------------------------------------------------------------------
+        # 각 노치가 힘을 낼 수 있는 최대 속도를 정의합니다.
+        # 예: P1은 40km/h 넘어가면 힘이 빠짐, P13은 330km/h까지 힘을 냄
+        
+        # 1. 노치별 한계 속도 테이블 (차량 특성에 맞게 튜닝 필요)
+        # 예시: 총 13단이라고 가정할 때 (저단은 낮게, 고단은 높게)
+        # 비율(0.0 ~ 1.2) * 최고속도(maxSpeed_kmh) 로 계산하거나 직접 입력
+        
+            if self.veh.type == "고속":
+                # 고속열차 예시 (P1~P5는 저속용, P6~P9 중속, P10~ 전속)
+                # idx는 0부터 시작하므로 P1(idx 0), P2(idx 1)...
+                
+                # P1은 최고속도의 15%까지만 힘을 냄, P13은 110%까지(여유분)
+                limit_ratios = [
+                    # --- 저속 구간 (정밀 제어) ---
+                    0.12,  # P1 :  43 km/h (구내 운전, 연결 대기 등)
+                    0.22,  # P2 :  79 km/h
+                    0.32,  # P3 : 115 km/h
+                    0.41,  # P4 : 147 km/h
+                    
+                    # --- 중속 크루징 (님 데이터 반영) ---
+                    0.50,  # P5 : 180 km/h (Target Match!)
+                    0.58,  # P6 : 209 km/h
+                    0.66,  # P7 : 238 km/h
+                    0.74,  # P8 : 266 km/h (Target Match!)
+                    
+                    # --- 고속 주행 (가속력 싸움) ---
+                    0.82,  # P9 : 295 km/h (300km/h 진입용)
+                    0.90,  # P10: 324 km/h
+                    0.96,  # P11: 345 km/h
+                    1.02,  # P12: 367 km/h (평지 최고속도 도달용)
+                    1.10   # P13: 396 km/h (오르막에서도 360 유지하기 위한 오버파워)
+                ]
+            else:
+                # 일반 열차 (선형적으로 증가)
+                limit_ratios = [(i + 1) / n_forward * 1.2 for i in range(n_forward)]
 
-            # 가속도 산출
-            a_pwr = F_final / mass_kg
+            # 안전하게 인덱스 가져오기
+            safe_limit_idx = min(idx, len(limit_ratios) - 1)
+            notch_max_speed = self.veh.maxSpeed_kmh * limit_ratios[safe_limit_idx]
+            
+            # 2. 페이드 아웃 (Fade-out) 처리
+            # 딱 그 속도에서 힘이 0이 되면 충격이 있으므로, 
+            # 한계 속도 근처 10km/h 구간에서 서서히 힘을 0으로 줄임
+            
+            # 1. 튜닝 옵션
+            cutoff_range = 10.0      # 서서히 힘이 빠지는 구간 길이 (km/h)
+            min_residual = 0.18      # 한계 돌파 시 남겨둘 최소 힘 비율 (5%)
+                                     # 0.17 ~ 0.18 추천. 너무 크면 계속 가속되고 너무 작으면 정속 주행이 안됨
 
-            # 극저속(5km/h 미만) 기동성 보정 (P1 이상일 때만)
+            # 2. 로직 적용
+            if v_kmh > notch_max_speed:
+                # [수정됨] 0으로 끄지 않고, 계산된 힘의 5%만 찔끔 남겨둠
+                F_physics = F_physics * min_residual
+                
+            elif v_kmh > (notch_max_speed - cutoff_range):
+                # [수정됨] 100% -> 5%로 부드럽게 이어지도록 보간(Interpolation)
+                
+                # 구간 내 진행률 (0.0: 진입 ~ 1.0: 한계도달)
+                progress = (v_kmh - (notch_max_speed - cutoff_range)) / cutoff_range
+                
+                # 1.0 에서 min_residual 까지 줄어드는 계수 계산
+                # 예: progress가 0.5(중간)면 힘은 약 52.5% 발휘
+                factor = 1.0 - (progress * (1.0 - min_residual))
+                
+                F_physics *= factor
+            else:
+                # 한계 속도 한참 전: 100% 온전한 힘
+                pass
+
+            # ------------------------------------------------------------------
+            # [Finalize] 가속도 변환
+            # ------------------------------------------------------------------
+            # 여기서 계산된 F_physics는 순수 견인력이므로
+            # 나중에 바깥에서 a_davis(저항)를 빼주면 자연스럽게 평형 속도가 맞춰짐
+            
+            a_pwr = F_physics / mass_kg
+
+            # 극저속 보정 (기존 로직)
             if v_kmh < 5.0 and idx >= 0:
-                # ratio_T(토크비율)을 사용하여 묵직한 출발 보장
                 a_pwr = max(a_pwr, 0.15 * (ratio_T / 0.30)) 
 
             if self.veh.a_max > 0:
                 a_pwr = min(a_pwr, self.veh.a_max)
 
             return a_pwr
+            
+            # F_final = F_physics
+
+            # # 가속도 산출
+            # a_pwr = F_final / mass_kg
+
+            # # 극저속(5km/h 미만) 기동성 보정 (P1 이상일 때만)
+            # if v_kmh < 5.0 and idx >= 0:
+            #     # ratio_T(토크비율)을 사용하여 묵직한 출발 보장
+            #     a_pwr = max(a_pwr, 0.15 * (ratio_T / 0.30)) 
+
+            # if self.veh.a_max > 0:
+            #     a_pwr = min(a_pwr, self.veh.a_max)
+
+            # return a_pwr
 
         # ------------------------
         # 2) 물리 파라미터 없으면 기존 방식 유지 여기서 단 조절!!!

@@ -1,5 +1,5 @@
 git add .
-git commit -m "update davis coeff"
+git commit -m "update compute pwr accel"
 git push origin main
 
 pip install fastapi uvicorn[standard]
