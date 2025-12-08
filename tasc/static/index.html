@@ -4175,41 +4175,53 @@ class BveSoundEngine {
     const speeds = Object.keys(table).map(Number).sort((a, b) => a - b);
 
     for (const wavName of wavNames) {
-      // For this WAV, fill in missing values
+      // For this WAV, build a list of (speed, value) pairs with non-null values
+      const validPairs = [];
+      for (const speed of speeds) {
+        if (table[speed][wavName] !== null && table[speed][wavName] !== undefined) {
+          validPairs.push({ speed, val: table[speed][wavName] });
+        }
+      }
+
+      // Now fill in missing values using binary search for efficiency
       for (const speed of speeds) {
         if (table[speed][wavName] !== null && table[speed][wavName] !== undefined) {
           continue; // Already has a value
         }
 
-        // Find nearest valid speeds above and below
-        let speedBelow = null, speedAbove = null;
-        let valBelow = null, valAbove = null;
+        // Binary search to find the nearest valid speeds
+        let below = null, above = null;
 
-        for (let i = 0; i < speeds.length; i++) {
-          if (speeds[i] < speed && table[speeds[i]][wavName] !== null) {
-            speedBelow = speeds[i];
-            valBelow = table[speeds[i]][wavName];
+        // Find the last valid pair with speed <= current speed
+        for (let i = validPairs.length - 1; i >= 0; i--) {
+          if (validPairs[i].speed <= speed) {
+            below = validPairs[i];
+            break;
           }
-          if (speeds[i] > speed && table[speeds[i]][wavName] !== null && valAbove === null) {
-            speedAbove = speeds[i];
-            valAbove = table[speeds[i]][wavName];
+        }
+
+        // Find the first valid pair with speed > current speed
+        for (let i = 0; i < validPairs.length; i++) {
+          if (validPairs[i].speed > speed) {
+            above = validPairs[i];
+            break;
           }
         }
 
         // Interpolate or use default
-        if (speedBelow !== null && speedAbove !== null) {
+        if (below !== null && above !== null) {
           // Linear interpolation
-          const t = (speed - speedBelow) / (speedAbove - speedBelow);
-          table[speed][wavName] = valBelow * (1 - t) + valAbove * t;
-        } else if (speedBelow !== null) {
+          const t = (speed - below.speed) / (above.speed - below.speed);
+          table[speed][wavName] = below.val * (1 - t) + above.val * t;
+        } else if (below !== null) {
           // Use value below
-          table[speed][wavName] = valBelow;
-        } else if (speedAbove !== null) {
+          table[speed][wavName] = below.val;
+        } else if (above !== null) {
           // Use value above
-          table[speed][wavName] = valAbove;
+          table[speed][wavName] = above.val;
         } else {
-          // Isolated: use default (1.0 for freq, 0 for vol, detected by context later)
-          table[speed][wavName] = null; // Will use default at runtime
+          // Isolated: use default
+          table[speed][wavName] = null;
         }
       }
     }
@@ -4230,12 +4242,23 @@ class BveSoundEngine {
         fetch(brakeFreqPath).then(r => r.text()),
       ]);
 
+      // Parse each CSV sequentially with UI updates to prevent thread blocking
       this.powerVolTable = this.parseCSV(powerVolText);
-      this.powerFreqTable = this.parseCSV(powerFreqText);
-      this.brakeVolTable = this.parseCSV(brakeVolText);
-      this.brakeFreqTable = this.parseCSV(brakeFreqText);
+      await new Promise(resolve => setTimeout(resolve, 20));
+      this.updateLoadingUI("Loading motor tables... (1/4)", 20);
 
+      this.powerFreqTable = this.parseCSV(powerFreqText);
+      await new Promise(resolve => setTimeout(resolve, 20));
+      this.updateLoadingUI("Loading motor tables... (2/4)", 25);
+
+      this.brakeVolTable = this.parseCSV(brakeVolText);
+      await new Promise(resolve => setTimeout(resolve, 20));
+      this.updateLoadingUI("Loading motor tables... (3/4)", 30);
+
+      this.brakeFreqTable = this.parseCSV(brakeFreqText);
+      await new Promise(resolve => setTimeout(resolve, 20));
       this.updateLoadingUI("Motor tables loaded", 35);
+
       console.log("BVE CSV tables loaded successfully");
     } catch (err) {
       console.error("Failed to load BVE CSV tables:", err);
@@ -4257,24 +4280,42 @@ class BveSoundEngine {
   }
 
   /**
-   * Load all WAV files from the motor directory.
+   * Load all WAV files from the motor directory (with UI updates between batches).
    */
   async loadWavBuffers(motorDirPath, wavFileNames) {
     try {
-      const promises = wavFileNames.map((name, idx) =>
-        fetch(`${motorDirPath}/${name}`)
-          .then(r => r.arrayBuffer())
-          .then(buf => this.ctx.decodeAudioData(buf))
-          .then(decoded => {
-            this.wavBuffers[name.replace('.wav', '')] = decoded;
-            // Update loading screen for each loaded WAV
-            const progress = 35 + Math.floor((idx + 1) / wavFileNames.length * 55);
-            this.updateLoadingUI(`Loading audio (${idx + 1}/${wavFileNames.length})`, progress);
-          })
-          .catch(err => console.warn(`Failed to load ${name}:`, err))
-      );
+      const batchSize = 3; // 3개씩 동시에 로드 (메인 스레드 블로킹 방지)
+      
+      for (let batchStart = 0; batchStart < wavFileNames.length; batchStart += batchSize) {
+        const batchEnd = Math.min(batchStart + batchSize, wavFileNames.length);
+        const batchPromises = [];
 
-      await Promise.all(promises);
+        for (let i = batchStart; i < batchEnd; i++) {
+          const name = wavFileNames[i];
+          const promise = fetch(`${motorDirPath}/${name}`)
+            .then(r => r.arrayBuffer())
+            .then(buf => this.ctx.decodeAudioData(buf))
+            .then(decoded => {
+              this.wavBuffers[name.replace('.wav', '')] = decoded;
+            })
+            .catch(err => console.warn(`Failed to load ${name}:`, err));
+          
+          batchPromises.push(promise);
+        }
+
+        // 현재 배치 대기
+        await Promise.all(batchPromises);
+
+        // 각 배치 후 UI 업데이트 (메인 스레드 해방)
+        const progress = 35 + Math.floor(batchEnd / wavFileNames.length * 55);
+        this.updateLoadingUI(`Loading audio (${batchEnd}/${wavFileNames.length})`, progress);
+
+        // 다음 배치 전에 짧은 지연 (UI 렌더링 기회 제공)
+        if (batchEnd < wavFileNames.length) {
+          await new Promise(resolve => setTimeout(resolve, 10));
+        }
+      }
+
       this.updateLoadingUI("Audio ready!", 90);
       console.log(`BVE loaded ${Object.keys(this.wavBuffers).length} WAV buffers`);
     } catch (err) {
