@@ -3214,127 +3214,65 @@ ground.receiveShadow = false;
 ground.castShadow = false;
 scene.add(ground);
 
-  // --- 트랙 텍스처(침목+레일을 하나의 텍스처로 합쳐서 처리) ---
-function createTrackCanvasTexture() {
-  const tileW = 1024, tileH = 256;
-  const cvs = document.createElement('canvas'); 
-  cvs.width = tileW; 
-  cvs.height = tileH;
-  const c = cvs.getContext('2d');
-
-  // background: ballast-ish
-  c.fillStyle = '#6b6b5f';
-  c.fillRect(0, 0, tileW, tileH);
-
-    // draw two metallic rails centered
-    const railCenterX = tileW/2;
-    const railOffset = 120; // pixel offset from center
-    // function drawRail(cx){
-    //   // base dark strip
-    //   // c.fillStyle = '#2a2a2a';
-    //   // c.fillRect(cx-6, tileH*0.2, 12, tileH*0.6);
-    //   // highlight
-    //   const grad = c.createLinearGradient(cx-6,0,cx+6,0);
-    //   grad.addColorStop(0, 'rgba(255,255,255,0.10)');
-    //   grad.addColorStop(0.5, 'rgba(255,255,255,0.35)');
-    //   grad.addColorStop(1, 'rgba(255,255,255,0.10)');
-    //   c.fillStyle = grad;
-    //   c.fillRect(cx-2, tileH*0.25, 4, tileH*0.5);
-    // }
-    // drawRail(railCenterX - railOffset);
-    // drawRail(railCenterX + railOffset);
-
-    // subtle grime overlay
-    c.fillStyle = 'rgba(10,10,12,0.05)';
-    c.fillRect(0,0,tileW,tileH);
-
-    const tex = new THREE.CanvasTexture(cvs);
-    tex.wrapS = tex.wrapT = THREE.RepeatWrapping;
-    tex.repeat.set(1, 40);
-    const MAX_ANISO = Math.min(4, renderer.capabilities.getMaxAnisotropy());
-    tex.anisotropy = MAX_ANISO;
-    tex.encoding = THREE.sRGBEncoding;
-    return tex;
-  }
-
-  const trackTex = createTrackCanvasTexture();
-
-  // track plane: a narrow strip representing sleepers+ballast; rails will still have metallic highlights
-  const trackMat = new THREE.MeshStandardMaterial({ map: trackTex, roughness: 0.85, metalness: 0.05 });
-  const trackWidth = 2.5;
-  const trackLen = 120000;
-  const trackGeo = new THREE.PlaneGeometry(trackWidth, trackLen, 1, 1);
-  const track = new THREE.Mesh(trackGeo, trackMat);
-  track.rotation.x = -Math.PI/2;
-  track.position.y = 0.01;
-  track.position.z = 200;
-  track.receiveShadow = false;
-  scene.add(track);
-
-  const track2 = new THREE.Mesh(trackGeo, trackMat);
-  track2.position.set(4, 0.01, 200);
-  track2.rotation.x = -Math.PI/2;
-  track2.position.y = 0.01;
-  track2.position.z = 200;
-  track2.receiveShadow = false;
-  scene.add(track2);
-
-  // const track3 = new THREE.Mesh(trackGeo, trackMat);
-  // track3.position.set(-6.5, 0.01, 200);
-  // track3.rotation.x = -Math.PI/2;
-  // track3.position.y = 0.01;
-  // track3.position.z = 200;
-  // track3.receiveShadow = false;
-  // scene.add(track3);
-
-  // rails (thin metallic extrusions) on top of the track plane for specular highlights and correct shading
-  const railMat = new THREE.MeshStandardMaterial({ color:0xe0e5e5, metalness:0.95, roughness:0.28 });
-  const railH = 0.14, railW = 0.045, railLen = 120000;
-  const railGeo = new THREE.BoxGeometry(railW, railH, railLen);
-  const railL = new THREE.Mesh(railGeo, railMat);
-  const railR = new THREE.Mesh(railGeo, railMat);
-  const s = 0.5335; // narrow gauge 기준 레일 간격 절반
-  railL.position.set(-s, railH/2 + 0.1, 200); //지상으로 부터 10cm 띄워서 텍스처의 겹침현상 방지
-  railR.position.set( s, railH/2 + 0.1, 200);
-  railL.castShadow = false; railL.receiveShadow = false;
-  railR.castShadow = false; railR.receiveShadow = false;
-  scene.add(railL, railR);
+  // Load rail texture instead of drawing track and rails
+  const textureLoader = new THREE.TextureLoader();
+  const railTexture = textureLoader.load('/static/textures/rail.png');
   
+  // Configure texture for vertical scrolling (U wrapping for side-to-side, V for length)
+  railTexture.wrapS = THREE.RepeatWrapping;
+  railTexture.wrapT = THREE.RepeatWrapping;
+  railTexture.repeat.set(1, 4000); // Will be updated dynamically for scroll effect
+
+  // Create material using the rail texture
+  const railMat = new THREE.MeshStandardMaterial({ 
+    map: railTexture,
+    roughness: 0.4, 
+    metalness: 0.8,
+    side: THREE.DoubleSide
+  });
+
+  // Left rail using texture
+  const railWidth = 1.6;
+  const railLen = 120000;
+  const railGeo = new THREE.PlaneGeometry(railWidth, railLen, 1, 1);
+  const s = 0.5335; // narrow gauge 기준 레일 간격 절반
+  
+  // const railL = new THREE.Mesh(railGeo, railMat);
+  // railL.rotation.x = -Math.PI/2;
+  // railL.rotation.z = Math.PI; // Slight tilt for perspective
+  // railL.position.set(-s, 0.1, 200);
+  // railL.castShadow = false;
+  // railL.receiveShadow = false;
+  // scene.add(railL);
+
+  // Right rail using texture
+  const railR = new THREE.Mesh(railGeo, railMat);
+  railR.rotation.x = -Math.PI/2;
+  railR.rotation.z = -Math.PI; // Opposite tilt
+  railR.position.set(s, 0.1, 200);
+  railR.castShadow = false;
+  railR.receiveShadow = false;
+  scene.add(railR);
+
+  // Left rail for second track
   const railL2 = new THREE.Mesh(railGeo, railMat);
-  const railR2 = new THREE.Mesh(railGeo, railMat);
-  railL2.position.set(-s+4, railH/2 + 0.1, 200);
-  railR2.position.set( s+4, railH/2 + 0.1, 200);
-  railL2.castShadow = false; railL2.receiveShadow = false;
-  railR2.castShadow = false; railR2.receiveShadow = false;
-  scene.add(railL2, railR2);
+  railL2.rotation.x = -Math.PI/2;
+  railL2.rotation.z = Math.PI;
+  railL2.position.set(-s+4, 0.1, 200);
+  railL2.castShadow = false;
+  railL2.receiveShadow = false;
+  scene.add(railL2);
 
-  // const railL3 = new THREE.Mesh(railGeo, railMat);
-  // const railR3 = new THREE.Mesh(railGeo, railMat);
-  // railL3.position.set(-0.535-6.5, railH/2 + 0.01, 200);
-  // railR3.position.set( 0.535-6.5, railH/2 + 0.01, 200);
-  // railL3.castShadow = false; railL3.receiveShadow = false;
-  // railR3.castShadow = false; railR3.receiveShadow = false;
-  // scene.add(railL3, railR3);
+  // Right rail for second track
+  // const railR2 = new THREE.Mesh(railGeo, railMat);
+  // railR2.rotation.x = -Math.PI/2;
+  // railR2.rotation.z = -Math.PI;
+  // railR2.position.set(s+4, 0.1, 200);
+  // railR2.castShadow = false;
+  // railR2.receiveShadow = false;
+  // scene.add(railR2);
 
-//   // --- 침목(InstancedMesh) ---
-//   const sleeperMat = new THREE.MeshStandardMaterial({
-//     map: loadTex(TX.sleeper, {aniso:true, repeat:{x:1, y:1}}),
-//     roughness: 0.9, metalness: 0.0
-//   });
-//   const sleeperGeo = new THREE.BoxGeometry(2.0, 0.08, 0.22); // 길이x높이x두께(가시적)
-//   const sleeperCount = 2000; // 0.5~0.6m 간격으로 400m
-//   const sleepers = new THREE.InstancedMesh(sleeperGeo, sleeperMat, sleeperCount);
-//   sleepers.instanceMatrix.setUsage(THREE.DynamicDrawUsage);
-//   scene.add(sleepers);
-//   const pitch = 0.65;
-//   for (let i=0;i<sleeperCount;i++){
-//   const z = 200 - i*pitch; // z ∈ [200, 200-1000]
-//   if (z < -300) break; // -300m까지만 배치하면 충분
-//   const m = new THREE.Matrix4().makeTranslation(0, 0.02, z);
-//   sleepers.setMatrixAt(i, m);
-// }
-
-
+  
 // === 가설 전차선 전봇대 + 전선 추가 ===
   // ⚠ PNG 파일 경로는 네가 가진 실제 파일명으로 고쳐 써줘!
   const leftPoleTex = texLoader.load("/static/textures/pole_left.png");
