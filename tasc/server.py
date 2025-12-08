@@ -573,7 +573,7 @@ class StoppingSim:
     def _clamp_notch(self, n: int) -> int:
         # forward_notches 길이만큼 음수 허용
         min_notch = -len(self.veh.forward_notch_accels)  # 예: -2
-        max_notch = len(self.veh.notch_accels) - 1       # EB 인덱스
+        max_notch = len(self.veh.notch_accels) - 2       # EB 직전 (W/S로는 EB 도달 불가)
         return max(min_notch, min(max_notch, n))
 
 
