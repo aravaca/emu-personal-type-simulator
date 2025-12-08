@@ -2380,8 +2380,8 @@ function buildCabOverlay(layoutKey) {
     // 혹시 예전 캔버스 버전이 남아있다면 비활성화
     window.drawMiniBrakeLadder = undefined;
 
-    let ladderX = CAB_W - 1458; // 오른쪽에서 살짝 안쪽
-    let ladderY = CAB_H - 193; // 아래에서 조금 위
+    let ladderX = CAB_W - 1188; // 오른쪽에서 살짝 안쪽
+    let ladderY = CAB_H - 180; // 아래에서 조금 위
     let ladderW = 34;
     let ladderH = 125;
 
@@ -2439,12 +2439,9 @@ function buildCabOverlay(layoutKey) {
       ladderGroup.setAttribute("transform", `rotate(${rotateAngle} ${centerX} ${centerY})`);
     }
     if (vehicle.name.toLowerCase().includes("e235")) {
-      const rotateAngle = 15; // 원하는 각도 (예: 10도)
-      const centerX = ladderX + ladderW / 2; // 회전 중심 X
-      const centerY = ladderY + ladderH / 2; // 회전 중심 Y
-
-      // ladderGroup에 회전 transform 추가
-      ladderGroup.setAttribute("transform", `rotate(${rotateAngle} ${centerX} ${centerY})`);
+      const skewAngle = -16; // 기울기 각도 (도)
+      // skewX를 사용하면 좌우 변만 기울어져서 평행사변형 형태가 됨
+      ladderGroup.setAttribute("transform", `skewX(${skewAngle})`);
     }
 
     const normalBlocks = []; // B1~B(EB-1) 사각형
