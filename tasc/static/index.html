@@ -3198,24 +3198,147 @@ if (ws.readyState === WebSocket.OPEN) {
 window.maybeSpawnEmergencyObstacle = maybeSpawnEmergencyObstacle;
 window.clearEmergencyObstacle = clearEmergencyObstacle;
 
-// --- 지반(콘크리트 단색) ---
+// 1. 텍스처 로더 생성
+  const textureLoader = new THREE.TextureLoader();
+
+
+// 2. 텍스처 로드 (따옴표 안에 가지고 계신 이미지 파일 경로를 넣으세요)
+const groundTexture = textureLoader.load('/static/textures/ground/greyasp.avif');
+
+// 3. 텍스처 반복 설정 (매우 중요!)
+// 지반이 아주 길기 때문에 반복 설정을 하지 않으면 이미지가 심하게 늘어납니다.
+groundTexture.wrapS = THREE.RepeatWrapping; // 가로 방향 반복 허용
+groundTexture.wrapT = THREE.RepeatWrapping; // 세로 방향 반복 허용
+
+// 반복 횟수 설정: (가로 반복 횟수, 세로 반복 횟수)
+// 지반 길이(120000)가 매우 기므로 세로 반복을 큰 숫자(예: 6000)로 잡아야 비율이 맞습니다.
+// 이미지가 너무 촘촘하면 숫자를 줄이고, 너무 늘어지면 숫자를 늘리세요.
+groundTexture.repeat.set(1, 8000); 
+
+// 색상 보정 (선택 사항, 이미지가 너무 어둡거나 밝으면 확인)
+groundTexture.colorSpace = THREE.SRGBColorSpace; 
+
+// --- 지반 Material 설정 ---
 const groundMat = new THREE.MeshStandardMaterial({
-  color: 0x8d8d8d,   // 밝은 회색 (콘크리트 느낌)
-  roughness: 0.95,   // 표면 거칠기 높게
-  metalness: 0.0     // 금속성 없음
+  map: groundTexture,  // color 대신 map 속성에 텍스처 연결
+  roughness: 0.9,      // 콘크리트 질감을 위해 거칠기 유지
+  metalness: 0.0
 });
 
-const ground = new THREE.Mesh(new THREE.PlaneGeometry(20, 120000, 1, 1), groundMat);
+// --- Mesh 생성 (기존과 동일) ---
+const ground = new THREE.Mesh(new THREE.PlaneGeometry(15, 120000, 1, 1), groundMat);
 ground.rotation.x = -Math.PI / 2;
 ground.position.y = -0.2;
-//진짜 땅
 ground.position.z = 200;
-ground.receiveShadow = false;
+ground.receiveShadow = false; 
 ground.castShadow = false;
 scene.add(ground);
+// --- 1. 설정: 텍스처 목록과 빈도(weight) 정의 ---
+// 여기에 섞어 쓰고 싶은 이미지 경로를 추가하세요.
+// const wallConfigs = [
+//   { 
+//     path: '/static/textures/wall/ad/45ad1.png', // 메인 텍스처
+//     weight: 1 // 10만큼의 비중 (가장 많이 나옴)
+//   },
+//   { 
+//     path: '/static/textures/wall/ad/45ad2.png', // 메인 텍스처
+//     weight: 1 // 10만큼의 비중 (가장 많이 나옴)
+//   },
+//   { 
+//     path: '/static/textures/wall/ad/45ad3.png', // 메인 텍스처
+//     weight: 1 // 10만큼의 비중 (가장 많이 나옴)
+//   },
+//   { 
+//     path: '/static/textures/wall/stawall/stawall.png', // 섞을 다른 텍스처 (예시)
+//     weight: 10  // 1만큼의 비중 (가끔 나옴)
+//   },
+//   { 
+//     path: '/static/textures/wall/stawall/stawall_1.png', // 섞을 다른 텍스처 (예시)
+//     weight: 10  // 1만큼의 비중 (가끔 나옴)
+//   },
+//   { 
+//     path: '/static/textures/wall/stawall/44stawall.png', // 섞을 다른 텍스처 (예시)
+//     weight: 1  // 1만큼의 비중 (가끔 나옴)
+//   },
+//   // 필요하면 여기에 { path: '...', weight: N } 형태로 계속 추가 가능
+// ];
 
+// // --- 2. 텍스처 및 머티리얼 미리 로드 ---
+// // 렉 방지를 위해 미리 로딩해둡니다.
+// const loadedMaterials = [];
+// let totalWeight = 0;
+
+// wallConfigs.forEach(config => {
+//   const tex = textureLoader.load(config.path);
+//   tex.colorSpace = THREE.SRGBColorSpace;
+  
+//   // 패널 하나에 이미지가 꽉 차게 보이도록 설정
+//   // (작은 조각들을 이어 붙이므로 repeat 설정이 필요 없습니다)
+  
+//   const mat = new THREE.MeshBasicMaterial({ 
+//     map: tex, 
+//     side: THREE.DoubleSide 
+//   });
+  
+//   loadedMaterials.push({ material: mat, weight: config.weight });
+//   totalWeight += config.weight;
+// });
+
+// // 랜덤 뽑기 함수
+// function getRandomMaterial() {
+//   let randomNum = Math.random() * totalWeight;
+//   for (let i = 0; i < loadedMaterials.length; i++) {
+//     randomNum -= loadedMaterials[i].weight;
+//     if (randomNum < 0) return loadedMaterials[i].material;
+//   }
+//   return loadedMaterials[0].material;
+// }
+
+// // --- 3. 벽 생성 (조각 이어 붙이기) ---
+// const groundLength = 120000; // 전체 길이
+// const zCenter = 200;         // 지반의 중심 Z 위치
+
+// // [중요] 조각 하나의 길이 설정
+// // 기존에 120,000 길이에 6,000번 반복하셨죠? (120000 / 6000 = 20)
+// // 즉, 이미지 하나당 길이가 20이었습니다. 비율을 유지하기 위해 20으로 설정합니다.
+// const segmentLength = 20;    
+
+// const segmentCount = Math.ceil(groundLength / segmentLength); // 필요한 조각 개수 (약 6000개)
+// const wallGeometry = new THREE.PlaneGeometry(segmentLength, 5); // 가로 20, 세로 5 (사용자 설정 값)
+
+// // 성능 최적화를 위해 그룹으로 묶음
+// const leftWallGroup = new THREE.Group();
+// const rightWallGroup = new THREE.Group();
+
+// // 시작 Z 위치 계산 (중심에서 절반만큼 뒤로 이동)
+// const startZ = zCenter - (groundLength / 2);
+
+// for (let i = 0; i < segmentCount; i++) {
+//   // 현재 조각의 Z 위치 계산
+//   // (i * 길이) + (길이의 절반/중심보정) + 시작점
+//   const zPos = startZ + (i * segmentLength) + (segmentLength / 2);
+
+//   // -- 왼쪽 벽 조각 --
+//   const leftMat = getRandomMaterial(); 
+//   const leftMesh = new THREE.Mesh(wallGeometry, leftMat);
+  
+//   leftMesh.rotation.y = Math.PI / 2; // 회전
+//   leftMesh.position.set(-5.5, 2.5, zPos); // 사용자 설정값: x=-7.5, y=2.5
+//   leftWallGroup.add(leftMesh);
+
+//   // -- 오른쪽 벽 조각 --
+//   const rightMat = getRandomMaterial(); 
+//   const rightMesh = new THREE.Mesh(wallGeometry, rightMat);
+  
+//   rightMesh.rotation.y = -Math.PI / 2; // 안쪽 보게 반대 회전
+//   rightMesh.position.set(7, 2.5, zPos); // 사용자 설정값: x=7.5, y=2.5
+//   rightWallGroup.add(rightMesh);
+// }
+
+// // 씬에 추가
+// scene.add(leftWallGroup);
+// scene.add(rightWallGroup);
   // Load rail texture instead of drawing track and rails
-  const textureLoader = new THREE.TextureLoader();
   const railTexture = textureLoader.load('/static/textures/rail.png');
   
   // Configure texture for vertical scrolling (U wrapping for side-to-side, V for length)
