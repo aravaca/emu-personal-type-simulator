@@ -1866,6 +1866,12 @@ async def ws_endpoint(ws: WebSocket):
                 elif name == "atcOverspeed":
                     val = payload.get("val", payload.get("delta", payload.get("value", 0)))
                     sim.queue_command("atcOverspeed", val)
+                elif name == "setGrade":
+                    # Random grade update from client
+                    grade = float(payload.get("grade", 0.0))
+                    sim.scn.grade_percent = grade
+                    if DEBUG:
+                        print(f"[RANDOM GRADE] Updated to {grade}% (‰: {grade * 10:.1f})")
 
                 elif name == "setTrainLength":
                     length = int(payload.get("length", 8))

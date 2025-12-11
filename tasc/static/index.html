@@ -4104,7 +4104,7 @@ const angle = (lowerName.includes('ktx') || lowerName.includes('999'))
 
 
 // 카메라를 살짝 왼쪽으로 이동시키고, 살짝 아래쪽을 바라보게 설정
-const xOffset = (lowerName.includes('seoul'))? 0: 0.9;  // 카메라를 왼쪽으로 1.5 단위 이동
+const xOffset = (lowerName.includes('seoul')) || (lowerName.includes('ktx'))  ? 0: 0.9;  // 카메라를 왼쪽으로 1.5 단위 이동
 const yOffset = y - angle; // 기존보다 살짝 더 아래쪽을 바라보도록 설정
 const zOffset = z + 4.0;  // 기존 z에 조정값 추가
 
@@ -6236,6 +6236,10 @@ addEventListener("keydown", (e) => {
 const grade_percentEl=document.getElementById("grade_percent");
 let isFinished=false, overlayShowingResult=false, st=null, lastTimestamp=0, prevMaxDistance=0;
 
+// 🎲 Random Grade Variables (for KTX/N700S with rndtoggle)
+let lastRandomizedDistance = 0;  // Last distance where grade was randomized
+let currentRandomGrade = 0;      // Current random grade value
+
 // 🎮 Pause state management
 let gamePaused = false;
 let pauseOverlay = null;
@@ -6906,7 +6910,66 @@ if (miniNotch) {
   miniNotch.style.color = notchEl.style.color;
 }
 
-grade_percentEl.textContent = (10 * st.grade_percent).toFixed(1);
+// 🎲 Random Grade Logic - Update every 2km for KTX/N700S when rndtoggle is ON
+let displayGrade = st.grade_percent;
+if (typeof st.remaining_m === 'number') {
+  const rndEl = document.getElementById('rndToggle');
+  const trainName = getCurrentTrainName().toLowerCase();
+  const isKtxOrN700s = trainName.includes('ktx') || trainName.includes('n700s');
+  const isRndOn = rndEl && rndEl.checked;
+  const currentDist = st.remaining_m || 0;
+  
+  // Fix grade to 0 when approaching platform (< 1000m)
+  if (currentDist < 1000) {
+    displayGrade = 0;
+    currentRandomGrade = 0;
+    // Send reset grade to server if needed
+    if (ws && ws.readyState === WebSocket.OPEN && lastRandomizedDistance !== currentDist) {
+      ws.send(JSON.stringify({ 
+        type: 'cmd', 
+        payload: { 
+          name: 'setGrade', 
+          grade: 0 
+        } 
+      }));
+      lastRandomizedDistance = currentDist;
+    }
+  } else if (isRndOn && isKtxOrN700s) {
+    const distTraveled = Math.abs(lastRandomizedDistance - currentDist);
+    
+    // Randomize every 2km (2000m)
+    if (distTraveled >= 2000) {
+      // 범위: -15 ~ 10 (총 범위 크기 25)
+      // 계산식: Math.random() * (최대값 - 최소값) + 최소값
+      //        Math.random() * (10 - (-15)) + (-15)
+      //        Math.random() * 25 - 15
+
+      currentRandomGrade = Math.random() * 25 - 15;
+      lastRandomizedDistance = currentDist;
+      
+      // Send grade update to server
+      if (ws && ws.readyState === WebSocket.OPEN) {
+        const newGradePercent = currentRandomGrade / 10;
+        ws.send(JSON.stringify({ 
+          type: 'cmd', 
+          payload: { 
+            name: 'setGrade', 
+            grade: newGradePercent 
+          } 
+        }));
+      }
+    }
+    
+    displayGrade = currentRandomGrade / 10; // Convert to match st.grade_percent format
+  } else {
+    // Reset when toggle is off or train doesn't match
+    lastRandomizedDistance = currentDist;
+    currentRandomGrade = 0;
+    displayGrade = st.grade_percent;
+  }
+}
+
+grade_percentEl.textContent = (10 * displayGrade).toFixed(1);
 
 if (miniGrade) {
   miniGrade.innerHTML = `
