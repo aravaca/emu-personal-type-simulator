@@ -1857,20 +1857,36 @@ async def ws_endpoint(ws: WebSocket):
                     delta = int(payload.get("delta", 0))
                     sim.queue_command("stepNotch", delta)
                     # Update final_notch_on_finish if simulation is finished (for random mode)
+                    # Process pending commands first to get actual notch value
                     if sim.state.finished:
-                        sim.final_notch_on_finish = sim.state.lever_notch + delta
+                        while sim._cmd_queue and sim._cmd_queue[0]["t"] <= sim.state.t:
+                            cmd = sim._cmd_queue.popleft()
+                            sim._apply_command(cmd)
+                        sim.final_notch_on_finish = sim.state.lever_notch
+                        if DEBUG:
+                            print(f"[FINISHED NOTCH] Updated to {sim.final_notch_on_finish} (stepNotch delta={delta})")
 
                 elif name == "release":
                     sim.queue_command("release", 0)
                     # Update final_notch_on_finish if simulation is finished
                     if sim.state.finished:
+                        while sim._cmd_queue and sim._cmd_queue[0]["t"] <= sim.state.t:
+                            cmd = sim._cmd_queue.popleft()
+                            sim._apply_command(cmd)
                         sim.final_notch_on_finish = 0
+                        if DEBUG:
+                            print(f"[FINISHED NOTCH] Updated to 0 (release)")
 
                 elif name == "emergencyBrake":
                     sim.queue_command("emergencyBrake", 0)
                     # Update final_notch_on_finish if simulation is finished
                     if sim.state.finished:
-                        sim.final_notch_on_finish = sim.veh.notches - 1
+                        while sim._cmd_queue and sim._cmd_queue[0]["t"] <= sim.state.t:
+                            cmd = sim._cmd_queue.popleft()
+                            sim._apply_command(cmd)
+                        sim.final_notch_on_finish = sim.state.lever_notch
+                        if DEBUG:
+                            print(f"[FINISHED NOTCH] Updated to {sim.state.lever_notch} (EB)")
 
                 elif name == "setNotch":
     # 'val'이나 'delta'에 상관없이 value가 있다면 우선
@@ -1878,7 +1894,12 @@ async def ws_endpoint(ws: WebSocket):
                     sim.queue_command("setNotch", val)
                     # Update final_notch_on_finish if simulation is finished
                     if sim.state.finished:
-                        sim.final_notch_on_finish = val
+                        while sim._cmd_queue and sim._cmd_queue[0]["t"] <= sim.state.t:
+                            cmd = sim._cmd_queue.popleft()
+                            sim._apply_command(cmd)
+                        sim.final_notch_on_finish = sim.state.lever_notch
+                        if DEBUG:
+                            print(f"[FINISHED NOTCH] Updated to {sim.state.lever_notch} (setNotch val={val})")
                 elif name == "setInternalNotch":
                     val = payload.get("val", payload.get("delta", payload.get("value", 0)))
                     sim.queue_command("setInternalNotch", val)
