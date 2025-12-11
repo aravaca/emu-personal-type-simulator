@@ -1,5 +1,5 @@
 git add .
-git commit -m "update ktx route"
+git commit -m "update pwr aceel"
 git push origin main
 
 pip install fastapi uvicorn[standard]

@@ -75,7 +75,7 @@ class Vehicle:
             # [고속열차 KTX/SRT]
             # 유선형 디자인 -> Cd(항력계수)가 매우 낮음
             # 고속 주행 안정성 -> 기계적 마찰(베어링 등) 효율이 좋음
-            current_Cd = 1.0   # 유선형 (매우 낮음)
+            current_Cd = 1.8   # 유선형 (매우 낮음)
             current_A = 11.2    # 고속열차는 보통 차체가 조금 더 큼 (단면적)
             tech_efficiency = 0.9 # 일반 열차 대비 기계적 저항 15% 감소 가정
         else:
@@ -879,46 +879,63 @@ class StoppingSim:
         # 비율(0.0 ~ 1.2) * 최고속도(maxSpeed_kmh) 로 계산하거나 직접 입력
         
             if self.veh.type == "고속":
-                # 고속열차 예시 (P1~P5는 저속용, P6~P9 중속, P10~ 전속)
-                # idx는 0부터 시작하므로 P1(idx 0), P2(idx 1)...
-                
-                # P1은 최고속도의 15%까지만 힘을 냄, P13은 110%까지(여유분)
+                # 고속열차 (HEMU, KTX 등) 노치별 속도 제한 비율
+                # P1~P4: 저속/구내 운전 (정밀)
+                # P5~P8: 중속/간선 운전
+                # P9~P13: 고속선 운전 (P13 = 100% 성능)
                 limit_ratios = [
-                    # --- 저속 구간 (정밀 제어) ---
-                    0.12,  # P1 :  43 km/h (구내 운전, 연결 대기 등)
-                    0.22,  # P2 :  79 km/h
-                    0.32,  # P3 : 115 km/h
-                    0.41,  # P4 : 147 km/h
+                    # --- 저속 구간 (정밀 제어, 연결/분리/서행) ---
+                    0.05,  # P1 :  18 km/h
+                    0.18,  # P2 :  60 km/h
+                    0.30,  # P3 : 108 km/h
+                    0.40,  # P4 : 144 km/h
                     
-                    # --- 중속 크루징 (님 데이터 반영) ---
-                    0.50,  # P5 : 180 km/h (Target Match!)
+                    # --- 중속 크루징 (일반선/터널 등 속도 유지용) ---
+                    0.50,  # P5 : 180 km/h (Target Match)
                     0.58,  # P6 : 209 km/h
                     0.66,  # P7 : 238 km/h
-                    0.74,  # P8 : 266 km/h (Target Match!)
+                    0.74,  # P8 : 266 km/h (Target Match)
                     
-                    # --- 고속 주행 (가속력 싸움) ---
-                    0.82,  # P9 : 295 km/h (300km/h 진입용)
-                    0.90,  # P10: 324 km/h
-                    0.96,  # P11: 345 km/h
-                    1.02,  # P12: 367 km/h (평지 최고속도 도달용)
-                    1.10   # P13: 396 km/h (오르막에서도 360 유지하기 위한 오버파워)
+                    # --- 고속 주행 (공기저항을 이겨내기 위한 고출력 구간) ---
+                    0.80,  # P9 : 288 km/h
+                    0.86,  # P10: 310 km/h (300km/h 정속 주행용)
+                    0.92,  # P11: 331 km/h
+                    0.97,  # P12: 349 km/h
+                    1.00   # P13: 360 km/h (설계 최고속도, 오버파워 없이 100% 출력)
                 ]
             else:
-                # 일반 열차 (선형적으로 증가)
+                # 일반 열차 (기존 로직 유지)
                 limit_ratios = [(i + 1) / n_forward * 1.2 for i in range(n_forward)]
 
             # 안전하게 인덱스 가져오기
             safe_limit_idx = min(idx, len(limit_ratios) - 1)
             notch_max_speed = self.veh.maxSpeed_kmh * limit_ratios[safe_limit_idx]
             
-            # 2. 페이드 아웃 (Fade-out) 처리
-            # 딱 그 속도에서 힘이 0이 되면 충격이 있으므로, 
-            # 한계 속도 근처 10km/h 구간에서 서서히 힘을 0으로 줄임
+# ... (Existing code for limit_ratios calculation) ...
+
+            # 안전하게 인덱스 가져오기
+            safe_limit_idx = min(idx, len(limit_ratios) - 1)
+            notch_max_speed = self.veh.maxSpeed_kmh * limit_ratios[safe_limit_idx]
             
-            # 1. 튜닝 옵션
-            cutoff_range = 30.0      # 서서히 힘이 빠지는 구간 길이 (km/h)
-            min_residual = 0.35      # 한계 돌파 시 남겨둘 최소 힘 비율 (5%)
-                                     # 0.17 ~ 0.18 추천. 너무 크면 계속 가속되고 너무 작으면 정속 주행이 안됨
+            # 2. 페이드 아웃 (Fade-out) 처리 개선
+            # P1, P2 (저속/정밀 제어)와 나머지 노치(주행)의 거동을 분리합니다.
+            
+            if idx <= 1: # idx 0 is P1, idx 1 is P2
+                # [CASE A: 저속 정밀 구간 (P1~P2)]
+                # 목표: 오버슈트 없이 부드럽게 한계 속도에 안착하거나 멈추기 위함.
+                # cutoff_range: 속도 한계에 가까워질 때 힘을 빼기 시작하는 범위 (작게 설정하여 정밀도 향상)
+                # min_residual: 한계 속도 도달 시 남길 힘 (0.0에 가깝게 하여 과속 방지)
+                cutoff_range = 15.0  
+                min_residual = 0.05  
+            else:
+                # [CASE B: 일반/고속 주행 구간 (P3~P13)]
+                # 목표: 공기 저항을 이기고 속도를 유지(Cruising)하거나 가속하기 위함.
+                # cutoff_range: 고속에서는 관성이 크므로 미리 힘을 조절하기 위해 넓게 잡음 (40km/h)
+                # min_residual: 고속 주행 시 공기저항 상쇄를 위해 일정 힘 유지 (0.4)
+                cutoff_range = 40.0
+                min_residual = 0.4
+
+            # ... (Proceed with the calculation using cutoff_range and min_residual) ...
 
             # 2. 로직 적용
             if v_kmh > notch_max_speed:
