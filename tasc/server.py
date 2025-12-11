@@ -701,6 +701,12 @@ class StoppingSim:
         # 두 번째 이후 run에서는 이전 final_notch_on_finish값으로 시작(보존된 notch)
         if self.random_mode and hasattr(self, 'final_notch_on_finish'):
             prev_lever_notch = int(self.final_notch_on_finish)
+            # EB는 보존하지 않음 - 다음 run에서는 일반 제동으로 변환 (최대 normal notch)
+            max_normal_notch = self.veh.notches - 2  # EB 직전
+            if prev_lever_notch >= self.veh.notches - 1:  # EB인 경우
+                prev_lever_notch = max_normal_notch  # EB를 최대 일반 노치로 변환
+                if DEBUG:
+                    print(f"[RESET] EB detected in final_notch_on_finish, converting to max normal notch ({max_normal_notch})")
             if DEBUG:
                 print(f"[RESET] *** RANDOM MODE NOTCH PRESERVATION: Using final_notch_on_finish={prev_lever_notch}")
         else:
@@ -1387,7 +1393,7 @@ class StoppingSim:
 
         # ---------- Finish ----------
         rem = self.scn.L - st.s
-        if not st.finished and (rem <= -5.0 or (rem <= 1.0 and st.v <= 0.0 and st.lever_notch >= 5)):
+        if not st.finished and (rem <= -5.0 or (rem <= 1.0 and st.v <= 0.0)):
             st.finished = True
             st.stop_error_m = self.scn.L - st.s
             st.residual_speed_kmh = st.v * 3.6
@@ -1850,16 +1856,29 @@ async def ws_endpoint(ws: WebSocket):
                 elif name in ("stepNotch", "applyNotch"):
                     delta = int(payload.get("delta", 0))
                     sim.queue_command("stepNotch", delta)
+                    # Update final_notch_on_finish if simulation is finished (for random mode)
+                    if sim.state.finished:
+                        sim.final_notch_on_finish = sim.state.lever_notch + delta
 
                 elif name == "release":
                     sim.queue_command("release", 0)
+                    # Update final_notch_on_finish if simulation is finished
+                    if sim.state.finished:
+                        sim.final_notch_on_finish = 0
 
                 elif name == "emergencyBrake":
                     sim.queue_command("emergencyBrake", 0)
+                    # Update final_notch_on_finish if simulation is finished
+                    if sim.state.finished:
+                        sim.final_notch_on_finish = sim.veh.notches - 1
+
                 elif name == "setNotch":
     # 'val'이나 'delta'에 상관없이 value가 있다면 우선
                     val = payload.get("val", payload.get("delta", payload.get("value", 0)))
                     sim.queue_command("setNotch", val)
+                    # Update final_notch_on_finish if simulation is finished
+                    if sim.state.finished:
+                        sim.final_notch_on_finish = val
                 elif name == "setInternalNotch":
                     val = payload.get("val", payload.get("delta", payload.get("value", 0)))
                     sim.queue_command("setInternalNotch", val)

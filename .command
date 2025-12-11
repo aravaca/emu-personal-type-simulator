@@ -1,5 +1,5 @@
 git add .
-git commit -m "update pwr aceel"
+git commit -m "update grade for hst"
 git push origin main
 
 pip install fastapi uvicorn[standard]
