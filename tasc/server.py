@@ -65,6 +65,14 @@ class Vehicle:
     davis_m_ref: float = 200000.0   # B1 기준 질량(kg) = 200t
     davis_B1_ref: float = 40.0      # B1 기준값 (N·s/m) @ 200t
 
+    def calibrate_C2_from_power(self, v_target_kmh: float = 300.0, eta: float = 0.85):
+        if self.P_max_kW <= 0:
+            return
+        v = v_target_kmh / 3.6
+        P = self.P_max_kW * 1000.0 * eta
+        F_req = P / max(0.1, v) # 목표 속도에서 필요한 저항력
+        self.C2 = max(0.0, (F_req - self.A0 - self.B1 * v) / (v * v))
+
     # new version of recompute_davis with type handling
     def recompute_davis(self, mass_kg: Optional[float] = None):
         """현재 총질량(kg)과 차량 Type에 맞춰 A0, B1, C2를 현실적으로 재계산"""
@@ -72,9 +80,9 @@ class Vehicle:
         
         # 1. [핵심] 차량 타입에 따른 물리 상수 설정 (분기 처리)
         if self.type == "고속":
-            current_Cd = 0.30 # 0.15~0.30 권장 시작점
-            current_A = 12 # 9~12 m^2 정도에서 튜닝
-            tech_efficiency = 0.90
+            current_Cd = 0.22 # 0.15~0.30 권장 시작점
+            current_A = 10.5 # 9~12 m^2 정도에서 튜닝
+            tech_efficiency = 0.85
         else:
             current_Cd = 1.1 # 0.8~1.4
             current_A = 9.5
@@ -933,8 +941,8 @@ class StoppingSim:
                 # 목표: 공기 저항을 이기고 속도를 유지(Cruising)하거나 가속하기 위함.
                 # cutoff_range: 고속에서는 관성이 크므로 미리 힘을 조절하기 위해 넓게 잡음 (40km/h)
                 # min_residual: 고속 주행 시 공기저항 상쇄를 위해 일정 힘 유지 (0.4)
-                cutoff_range = 20.0
-                min_residual = 0.2
+                cutoff_range = 40.0
+                min_residual = 0.4
 
             # ... (Proceed with the calculation using cutoff_range and min_residual) ...
 
@@ -1676,6 +1684,7 @@ async def ws_endpoint(ws: WebSocket):
 
     sim.veh.mass_kg = total_tons * 1000.0
     sim.veh.recompute_davis(sim.veh.mass_kg)
+    sim.veh.calibrate_C2_from_power(300.0, eta=0.85)
 
     if DEBUG:
         print(f"[INIT] len={cur_length}, load={cur_load_rate*100:.1f}% "
@@ -1923,6 +1932,7 @@ async def ws_endpoint(ws: WebSocket):
                     total_tons = cur_length * (base_1c_t + pax_1c_t * cur_load_rate)
                     sim.veh.mass_kg = total_tons * 1000.0
                     sim.veh.recompute_davis(sim.veh.mass_kg)
+                    sim.veh.calibrate_C2_from_power(300.0, eta=0.85)
 
                     if DEBUG:
                         print(f"[Length] {cur_length} cars | load={cur_load_rate*100:.1f}% "
@@ -1934,6 +1944,7 @@ async def ws_endpoint(ws: WebSocket):
                     sim.veh.mass_t = mass_tons / int(payload.get("length", 8))
                     sim.veh.mass_kg = mass_tons * 1000.0
                     sim.veh.recompute_davis(sim.veh.mass_kg) #  새 질량으로 재계산
+                    sim.veh.calibrate_C2_from_power(300.0, eta=0.85)
                     if DEBUG:
                         print(
                             f"총중량={mass_tons:.2f} t -> "
@@ -1952,6 +1963,7 @@ async def ws_endpoint(ws: WebSocket):
                     sim.veh.update_mass(cur_length) # 1차 (길이 반영)
                     sim.veh.mass_kg = total_tons * 1000.0 # 실제 총중량 덮어쓰기
                     sim.veh.recompute_davis(sim.veh.mass_kg) # 최종 재계산
+                    sim.veh.calibrate_C2_from_power(300.0, eta=0.85)
 
                     if DEBUG:
                         print(f"[LoadRate] length={cur_length}, load={cur_load_rate*100:.1f}% "
@@ -2017,6 +2029,7 @@ async def ws_endpoint(ws: WebSocket):
                             total_tons = cur_length * (base_1c_t + pax_1c_t * cur_load_rate)
                             sim.veh.mass_kg = total_tons * 1000.0
                             sim.veh.recompute_davis(sim.veh.mass_kg)
+                            sim.veh.calibrate_C2_from_power(300.0, eta=0.85)
 
                             sim.reset()
 
