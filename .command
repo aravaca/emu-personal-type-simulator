@@ -1,5 +1,5 @@
 git add .
-git commit -m "update hsr davis"
+git commit -m "update score eval criteria"
 git push origin main
 
 pip install fastapi uvicorn[standard]

@@ -1412,14 +1412,14 @@ class StoppingSim:
                 score += 300
 
             last_notch = self.notch_history[-1] if self.notch_history and abs(st.stop_error_m) <= 1.0 else 0
-            if last_notch == 1 or last_notch == 2:
+            if last_notch in [0, 1, 2]:
                 score += 300
                 st.issues["stop_not_b1"] = False
                 st.issues["stop_not_b1_msg"] = "정차 시 승차감 양호"
-            elif last_notch == 0:
-                score -= 100
-                st.issues["stop_not_b1"] = True
-                st.issues["stop_not_b1_msg"] = "정차 시 N으로 정차함 - 열차 미끄러짐 주의"
+            # elif last_notch == 0:
+            #     score -= 100
+            #     st.issues["stop_not_b1"] = True
+            #     st.issues["stop_not_b1_msg"] = "정차 시 N으로 정차함 - 열차 미끄러짐 주의"
             else:
                 score -= 100
                 st.issues["stop_not_b1"] = True
