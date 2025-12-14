@@ -1358,8 +1358,8 @@ class StoppingSim:
         self._update_brake_dyn_split(a_cmd_brake, st.v, is_eb, dt) # 제동 동역학 업데이트
         a_brake = self._wsp_update(st.v, self.brk_accel, dt) # 제동 가속도 (WSP 포함)
         a_grade = self._grade_accel() # 경사 가속도
-        if DEBUG and int(st.t) != int(st.t - dt):
-            print(f"grade%={self.scn.grade_percent:+.2f} a_grade={a_grade:+.3f}")
+        # if DEBUG and int(st.t) != int(st.t - dt):
+        #     print(f"grade%={self.scn.grade_percent:+.2f} a_grade={a_grade:+.3f}")
         a_davis = self._davis_accel(st.v) # 데이비스 항력 가속도
 
         a_target = pwr_accel + a_brake + a_grade + a_davis # 최종 목표 가속도
