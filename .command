@@ -1,5 +1,5 @@
 git add .
-git commit -m "update final notch preservation logic"
+git commit -m "fix grade calc eror"
 git push origin main
 
 pip install fastapi uvicorn[standard]

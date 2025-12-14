@@ -72,18 +72,13 @@ class Vehicle:
         
         # 1. [핵심] 차량 타입에 따른 물리 상수 설정 (분기 처리)
         if self.type == "고속":
-            # [고속열차 KTX/SRT]
-            # 유선형 디자인 -> Cd(항력계수)가 매우 낮음
-            # 고속 주행 안정성 -> 기계적 마찰(베어링 등) 효율이 좋음
-            current_Cd = 1.8   # 유선형 (매우 낮음)
-            current_A = 11.2    # 고속열차는 보통 차체가 조금 더 큼 (단면적)
-            tech_efficiency = 0.9 # 일반 열차 대비 기계적 저항 15% 감소 가정
+            current_Cd = 0.22 # 0.15~0.30 권장 시작점
+            current_A = 10.5 # 9~12 m^2 정도에서 튜닝
+            tech_efficiency = 0.85
         else:
-            # [일반열차/지하철]
-            # 박스형 디자인 -> Cd가 높음
-            current_Cd = 1.2    # 뭉툭한 형태 (일반적)
-            current_A = 10.0    # 표준 단면적
-            tech_efficiency = 0.9  # 기준값
+            current_Cd = 1.1 # 0.8~1.4
+            current_A = 9.5
+            tech_efficiency = 1.0
 
         # 2. 클래스 내부 변수 업데이트 (나중에 확인용)
         self.Cd = current_Cd
@@ -938,8 +933,8 @@ class StoppingSim:
                 # 목표: 공기 저항을 이기고 속도를 유지(Cruising)하거나 가속하기 위함.
                 # cutoff_range: 고속에서는 관성이 크므로 미리 힘을 조절하기 위해 넓게 잡음 (40km/h)
                 # min_residual: 고속 주행 시 공기저항 상쇄를 위해 일정 힘 유지 (0.4)
-                cutoff_range = 40.0
-                min_residual = 0.4
+                cutoff_range = 10.0
+                min_residual = 0.2
 
             # ... (Proceed with the calculation using cutoff_range and min_residual) ...
 
@@ -1908,7 +1903,7 @@ async def ws_endpoint(ws: WebSocket):
                     sim.queue_command("atcOverspeed", val)
                 elif name == "setGrade":
                     # Random grade update from client
-                    grade = float(payload.get("grade", 0.0))
+                    grade = float(payload.get("grade", 0.0))/10.0
                     sim.scn.grade_percent = grade
                     if DEBUG:
                         print(f"[RANDOM GRADE] Updated to {grade}% (‰: {grade * 10:.1f})")
