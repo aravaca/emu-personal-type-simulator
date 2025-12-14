@@ -109,23 +109,19 @@ class Vehicle:
         # 고속열차는 주행 안정 장치(Yaw Damper) 덕분에 뱀동(Hunting) 저항이 적음 -> 0.8배 보정
         b1_factor = 0.8 if self.type == "고속" else 1.0
         self.B1 = (self.davis_B1_ref * b1_factor) * (m / max(1.0, self.davis_m_ref))
+        
+        if self.type =="고속":
+            m_ref = 383000 #TGV Reseau Data
+            k = m / m_ref
+            self.A0 = 2700.0 *k     
+            self.B1 = 118.8*k
+            self.C2 = 6.6096
+            return
 
         if DEBUG:
             print(f"[Davis Recompute] Type={self.type}, Mass={m/1000:.1f}t")
             print(f"   -> Result: A0={self.A0:.1f}, B1={self.B1:.2f}, C2={self.C2:.2f}")
             print(f"   -> Params: Cd={self.Cd}, A={self.A}, TechFactor={tech_efficiency}")
-
-    # def recompute_davis(self, mass_kg: Optional[float] = None):
-    #     """현재 총질량(kg)에 맞춰 A0, B1, C2를 현실적으로 재계산"""
-    #     m = float(mass_kg) if mass_kg is not None else float(self.mass_kg)
-    #     # C2: 공력 항력(물리식)
-    #     self.C2 = 0.5 * self.rho_air * self.Cd * self.A
-    #     # A0: 구름/기계 상수항
-    #     self.A0 = self.davis_k0 * m * 9.81
-    #     # B1: 속도항(완만한 질량 비례)
-    #     self.B1 = self.davis_B1_ref * (m / max(1.0, self.davis_m_ref))
-    #     if DEBUG:
-    #         print(f"[Davis] mass={m:.0f} kg -> A0={self.A0:.1f}, B1={self.B1:.2f}, C2={self.C2:.2f}")
 
     def update_mass(self, length: int):
         """편성 량 수에 맞춰 총 질량(kg)을 업데이트"""
