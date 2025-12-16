@@ -3062,7 +3062,7 @@ const scene = new THREE.Scene();
   35,           // FOV (Field of View): 45도 (자연스러운 시야, 전방과 주변을 잘 볼 수 있도록 설정)
   initialW / initialH, // 종횡비 (화면의 너비와 높이 비율)
   0.1,          // Near plane: 0.1 (카메라가 볼 수 있는 가장 가까운 거리)
-  10000         // Far plane: 10000 (스카이돔 반지름보다 커야 함)
+  1000         // Far plane: 10000 (스카이돔 반지름보다 커야 함)
 );
 
   
@@ -3382,7 +3382,7 @@ const groundMat = new THREE.MeshStandardMaterial({
 });
 
 // --- Mesh 생성 (기존과 동일) ---
-const ground = new THREE.Mesh(new THREE.PlaneGeometry(1500, 120000, 1, 1), groundMat);
+const ground = new THREE.Mesh(new THREE.PlaneGeometry(800, 120000, 1, 1), groundMat);
 ground.rotation.x = -Math.PI / 2;
 ground.position.y = -2.5;
 ground.position.z = 200;
