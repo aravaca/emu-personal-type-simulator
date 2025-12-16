@@ -1,5 +1,5 @@
 git add .
-git commit -m "simukate low-speed brake fade"
+git commit -m "update platform graphics"
 git push origin main
 
 pip install fastapi uvicorn[standard]
