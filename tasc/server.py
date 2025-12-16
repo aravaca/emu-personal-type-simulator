@@ -209,6 +209,8 @@ class State:
     internal_notch: int = 0
     atc_overspeed: bool = False
     finished: bool = False
+    gear: str = "F"  # "F" (Forward), "N" (Neutral), or "R" (Reverse)
+    move_direction: int = 1  # 실제 이동 방향: 1=전진, -1=후진
     stop_error_m: Optional[float] = None
     residual_speed_kmh: Optional[float] = None
     score: Optional[int] = None
@@ -1380,6 +1382,10 @@ class StoppingSim:
         else:
             pwr_accel = self.compute_power_accel(st.lever_notch, st.v)
 
+        # N(중립) 기어일 때 가속(역행) 무효 - 브레이크만 작동
+        if st.gear == "N" and pwr_accel > 0:
+            pwr_accel = 0.0
+
         a_cmd_brake = self._effective_brake_accel(effective_notch, st.v)
         is_eb = (effective_notch == self.veh.notches - 1)
         self._update_brake_dyn_split(a_cmd_brake, st.v, is_eb, dt)
@@ -1417,12 +1423,26 @@ class StoppingSim:
 
         # 물리 적분
         st.v = max(0.0, st.v + st.a * dt)
-        st.s += st.v * dt + 0.5 * st.a * dt * dt
+        # F/R 기어에서 가속 시 이동 방향 설정 (N에서는 유지)
+        if st.gear == "F" and st.lever_notch < 0 and pwr_accel > 0:
+            st.move_direction = 1
+        elif st.gear == "R" and st.lever_notch < 0 and pwr_accel > 0:
+            st.move_direction = -1
+        # 속도가 0이면 이동 방향 초기화 (기어에 맞게)
+        if st.v < 0.001:
+            if st.gear == "F":
+                st.move_direction = 1
+            elif st.gear == "R":
+                st.move_direction = -1
+        
+        # move_direction으로 위치 계산 (N 기어에서도 관성 유지)
+        st.s += st.move_direction * (st.v * dt + 0.5 * st.a * dt * dt)
         st.t += dt
 
         # ---------- Finish ----------
         rem = self.scn.L - st.s
-        if not st.finished and (rem <= -5.0 or (rem <= 1.0 and st.v <= 0.0)):
+        # 종료 조건: -100m 넘어가면 강제종료 OR (오차 1m 이내 && 속도 0)
+        if not st.finished and (rem <= -100.0 or (abs(rem) <= 1.0 and st.v <= 0.01)):
             st.finished = True
             st.stop_error_m = self.scn.L - st.s
             st.residual_speed_kmh = st.v * 3.6
@@ -1624,6 +1644,7 @@ class StoppingSim:
             "v": st.v,
             "a": st.a,
             "lever_notch": st.lever_notch,
+            "gear": st.gear,  # "F" or "R"
             "remaining_m": self.scn.L - st.s,
             "L": self.scn.L,
             "v_ref": self.vref(st.s),
@@ -1943,6 +1964,44 @@ async def ws_endpoint(ws: WebSocket):
                     sim.scn.grade_percent = grade
                     if DEBUG:
                         print(f"[RANDOM GRADE] Updated to {grade}% (‰: {grade * 10:.1f})")
+
+                elif name == "toggleGear":
+                    # 기어 변경 규칙:
+                    # - 속도 0 && 브레이크 1단 이상: F ↔ N ↔ R 자유롭게 순환
+                    # - 그 외: F ↔ N, R ↔ N (N에서는 이전 이동방향으로 복귀)
+                    st = sim.state
+                    can_full_toggle = (abs(st.v) < 0.01) and (st.lever_notch >= 1)
+                    
+                    if can_full_toggle:
+                        # 자유롭게 순환: F → N → R → F → ...
+                        if st.gear == "F":
+                            st.gear = "N"
+                        elif st.gear == "N":
+                            st.gear = "R"
+                        elif st.gear == "R":
+                            st.gear = "F"
+                        if DEBUG:
+                            print(f"[GEAR] Changed to {st.gear} (full toggle)")
+                    else:
+                        # 제한된 전환: F ↔ N, R ↔ N
+                        if st.gear == "F":
+                            st.gear = "N"
+                            if DEBUG:
+                                print(f"[GEAR] F → N")
+                        elif st.gear == "R":
+                            st.gear = "N"
+                            if DEBUG:
+                                print(f"[GEAR] R → N")
+                        elif st.gear == "N":
+                            # N에서는 이동 방향에 따라 복귀
+                            if st.move_direction == -1:
+                                st.gear = "R"
+                                if DEBUG:
+                                    print(f"[GEAR] N → R (move_direction=-1)")
+                            else:
+                                st.gear = "F"
+                                if DEBUG:
+                                    print(f"[GEAR] N → F (move_direction=1)")
 
                 elif name == "setTrainLength":
                     length = int(payload.get("length", 8))

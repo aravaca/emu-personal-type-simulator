@@ -1602,6 +1602,11 @@ function getAtcMaxSpeed(remaining_m) {
         <span class="mini-label">Notch</span>
         <span class="mini-value" id="miniNotch">-</span>
       </div>
+
+      <div class="mini-row">
+        <span class="mini-label">Gear</span>
+        <span class="mini-value" id="miniGear">F</span>
+      </div>
     </div>
   </div>
 
@@ -1839,7 +1844,7 @@ function getAtcMaxSpeed(remaining_m) {
 
           <span class="kbd">Space</span> 재시작 ·
 
-          <span class="kbd">F5</span> 열차 변경
+          <span class="kbd">Z</span> 기어 변경
         </div>
 
         <button id="btnStart" class="btn-primary" type="button" style="margin-top:8px">
@@ -2692,7 +2697,7 @@ function getInterpolatedState() {
   const predictedSpeed = Math.max(0, v_curr + a_curr * dt);
   
   // 결과 저장 (디버그/모니터링용)
-  interpState.interpolatedRemaining = Math.max(0, predictedRemaining);
+  interpState.interpolatedRemaining = predictedRemaining;  // 음수 허용 (-100m까지)
   interpState.interpolatedSpeed = predictedSpeed;
   
   return {
@@ -2916,6 +2921,7 @@ const miniTimer = document.getElementById("miniTimer"),
   miniClock = document.getElementById("miniClock"),
       miniGrade = document.getElementById("miniGrade"),
       miniNotch = document.getElementById("miniNotch"),
+      miniGear = document.getElementById("miniGear"),
       miniNext = document.getElementById("miniNext"),
       miniMaxSpeed = document.getElementById("miniMaxSpeed");
       miniTitle = document.getElementById("miniHudTitle");
@@ -6479,6 +6485,18 @@ async function startRun(){
   hazardInfo.timeoutId = null;
   hazardInfo.success = false;
 
+  //  새 런 시작할 때 보간 상태 리셋
+  interpState.prev = null;
+  interpState.curr = null;
+  interpState.prevRecvTime = 0;
+  interpState.currRecvTime = 0;
+  interpState.estimatedInterval = 50;
+  interpState.interpolatedRemaining = 0;
+  interpState.interpolatedSpeed = 0;
+
+  //  새 런 시작할 때 HUD 스케일 리셋
+  prevMaxDistance = 0;
+
   //  새 런 시작할 때 장애물 상태 / 팝업 완전 리셋
   hideObstaclePopups(); // 혹시 남아있는 팝업 닫기
   if (window.clearEmergencyObstacle) {
@@ -6987,7 +7005,7 @@ if(/Mobi|Android|iPhone|iPad/i.test(navigator.userAgent)){
 
 /* ===== 키보드 ===== */
 addEventListener("keydown", (e) => {
-  if([" ","w","W","s","S","n","N","e","E","d","D", "a", "A", 'q', 'Q', 'p', 'P'].includes(e.key)) e.preventDefault();
+  if([" ","w","W","s","S","n","N","e","E","d","D", "a", "A", 'q', 'Q', 'p', 'P', 'z', 'Z'].includes(e.key)) e.preventDefault();
   // if(e.repeat) return
 
   // 🎮 Pause/Resume game with P key
@@ -7073,6 +7091,11 @@ addEventListener("keydown", (e) => {
     if(vehicle && vehicle.forward_notches){
       sendCmd("setNotch", -vehicle.forward_notches); // EB 직전 notch
     }
+  }
+  else if(e.key === "z" || e.key === "Z"){
+    // 기어 전환 (F ↔ R) - 서버에서 조건 체크
+    if(e.repeat) return;
+    sendCmd("toggleGear", 0);
   }
   else if (e.key === "b" || e.key === "B") {
     // 1) 그래프 그릴지 여부 (기존 기능 유지)
@@ -7548,16 +7571,17 @@ ws.onmessage = (ev) => {
     } catch (e) {
       console.debug("Door sound play error on finish:", e);
     }
-    // If the run finished because the train overran beyond -5m, mark next run to start with EB
+    // If the run finished because the train overran beyond -100m, mark next run to start with EB
     try {
       const remCheck = (typeof st.remaining_m === 'number') ? st.remaining_m : parseFloat(st.remaining_m);
-      // Use <= to catch equality cases where remaining_m is exactly -5
-      if (typeof remCheck === 'number' && !Number.isNaN(remCheck) && remCheck <= -5) {
-        // Force next run to start with EB notch
-        window.__forceNextStartEB = true;
-        console.debug('Run ended by overrun (rem=', remCheck, ') -> forcing EB on next start');
+      // Use <= to catch equality cases where remaining_m is exactly -100
+      if (typeof remCheck === 'number' && !Number.isNaN(remCheck) && remCheck <= -100) {
+        // -100m 초과: 페이지 새로고침
+        console.debug('Run ended by overrun (rem=', remCheck, ') -> reloading page');
+        setTimeout(() => { location.reload(); }, 500);
+        return;  // 더 이상 처리하지 않음
       }
-    } catch (e) { console.debug('force EB flag set error', e); }
+    } catch (e) { console.debug('overrun reload error', e); }
   }
   // 게임이 재시작될 때 도어음 트리거 리셋 (finished: true → false)
   if (!nowFinished && lastFinishedFlag && bveSoundEngine) {
@@ -7791,6 +7815,18 @@ if (miniNotch) {
   miniNotch.style.color = notchEl.style.color;
 }
 
+// 🔹 mini HUD – 기어
+if (miniGear) {
+  miniGear.textContent = st.gear || "F";
+  if (st.gear === "R") {
+    miniGear.style.color = "#ff5757";  // 빨강
+  } else if (st.gear === "N") {
+    miniGear.style.color = "#f1c40f";  // 노랑
+  } else {
+    miniGear.style.color = "#2ecc71";  // 초록 (F)
+  }
+}
+
 // 🎲 Random Grade Logic - Update every 2km for KTX/N700S when rndtoggle is ON
 let displayGrade = st.grade_percent;
 if (typeof st.remaining_m === 'number') {
@@ -7957,9 +7993,10 @@ function drawHUD(st){
   const dpr=devicePixelRatio||1, w=canvas.width, h=canvas.height;
   ctx.clearRect(0,0,w,h);
   const v0=st.v, lever=st.lever_notch, currentPos=st.pos??0, stopPos=st.stopPos??500;
-  const remaining=(typeof st.remaining_m==="number")?Math.max(0,st.remaining_m):Math.max(0,stopPos-currentPos);
+  const remaining=(typeof st.remaining_m==="number")?st.remaining_m:(stopPos-currentPos);  // 음수 허용
+  const remainingAbs = Math.max(0, remaining);  // HUD 계산용 (음수면 0으로)
   const maxDecel=Math.max(...Object.values(brakeDecels)); const maxStop=maxDecel>0?(v0*v0)/(2*maxDecel):0;
-  const speedFactor=Math.max(.3,Math.min(1,v0/10)); const adjusted=remaining*(1+(1-speedFactor)*.5);
+  const speedFactor=Math.max(.3,Math.min(1,v0/10)); const adjusted=remainingAbs*(1+(1-speedFactor)*.5);
   const s_b1=(brakeDecels[1]??0)>0?(v0*v0)/(2*brakeDecels[1]):0, s_b2=(brakeDecels[2]??0)>0?(v0*v0)/(2*brakeDecels[2]):0;
   const target=Math.max(1,maxStop*1.5,Math.max(1,Math.sqrt(adjusted)*10)*1.2,s_b1*1.1,s_b2*1.1);
   prevMaxDistance = prevMaxDistance===0 ? target : prevMaxDistance*.9 + target*.1;
