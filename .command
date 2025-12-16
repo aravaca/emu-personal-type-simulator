@@ -1,5 +1,5 @@
 git add .
-git commit -m "update score eval criteria"
+git commit -m "update graphics"
 git push origin main
 
 pip install fastapi uvicorn[standard]
