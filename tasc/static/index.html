@@ -1794,12 +1794,12 @@ function getAtcMaxSpeed(remaining_m) {
           <input id="inputGrade" type="number" value="0.0" min="-20" max="20" step="0.1" class="form-input">
         </label>
 
-        <label class="form-label"><span id="labelTimeofDay">시간대</span>
+        <!-- <label class="form-label"><span id="labelTimeofDay">시간대</span>
           <select id="timeOfDaySelect" class="form-input">
             <option value="day" selected>주간</option>
             <option value="night">야간</option>
           </select>
-        </label>
+        </label> -->
 
         <!-- 날씨 / 탑승률 -->
         <label class="form-label"><span id="labelWeather">날씨</span>
@@ -2940,58 +2940,161 @@ const overlay=document.getElementById("overlay"),
   // --- Three.js 기본 ---
 const scene = new THREE.Scene();
 
-  // ===== 📸 Skydome (360° 파노라마 배경) =====
-  let skydome = null;
+  // ===== 📸 BVE-Style Cylindrical Background =====
+  // BVE Format: Cylinder around camera, starts 60° left of forward (10 o'clock),
+  // wraps clockwise. Upper 3/4 above horizon, lower 1/4 below horizon.
+  // Height increased for better visibility. Default 6 repetitions for 360°.
   
-  // 먼저 기본 배경을 위한 구를 만들되, 텍스처는 로드 후에 적용
-  // 더 높은 세그먼트로 UV가 제대로 매핑되도록
-  const skydomeGeometry = new THREE.SphereGeometry(5000, 24, 24);
-  const skydomeBaseMaterial = new THREE.MeshBasicMaterial({
-    color: 0x87CEEB,  // 하늘색
+  let bveCylinder = null;
+  let bveTopCap = null;
+  let bveBottomCap = null;
+  const BVE_RADIUS = 500;
+  const BVE_HEIGHT = BVE_RADIUS * 1.2;  // Increased height for better vertical coverage
+  const BVE_REPETITIONS = 6;  // Default: 6 repetitions in full circle
+  const BVE_SEGMENTS = 64;    // Cylinder smoothness
+  
+  // Create BVE cylinder geometry (open-ended, we add caps separately)
+  const cylinderGeometry = new THREE.CylinderGeometry(
+    BVE_RADIUS,     // radiusTop
+    BVE_RADIUS,     // radiusBottom  
+    BVE_HEIGHT,     // height
+    BVE_SEGMENTS,   // radialSegments
+    1,              // heightSegments
+    true            // openEnded (we add caps manually)
+  );
+  
+  // Rotate cylinder so it's upright and adjust UV mapping for BVE style
+  // BVE starts 60° left of forward = -60° from +Z axis = +60° rotation
+  // Since cylinder starts at angle 0 = +X in Three.js, we need to rotate
+  cylinderGeometry.rotateY(Math.PI / 3);  // 60 degrees rotation
+  
+  // Custom UV mapping for BVE: clockwise wrap with repetitions
+  const posAttr = cylinderGeometry.attributes.position;
+  const uvAttr = cylinderGeometry.attributes.uv;
+  for (let i = 0; i < posAttr.count; i++) {
+    const x = posAttr.getX(i);
+    const y = posAttr.getY(i);
+    const z = posAttr.getZ(i);
+    
+    // Calculate angle from position (clockwise from start)
+    let angle = Math.atan2(x, z);  // Note: atan2(x,z) for clockwise
+    if (angle < 0) angle += Math.PI * 2;
+    
+    // U coordinate: wraps with repetitions
+    const u = (angle / (Math.PI * 2)) * BVE_REPETITIONS;
+    
+    // V coordinate: map full texture height to cylinder
+    // y ranges from -BVE_HEIGHT/2 to +BVE_HEIGHT/2
+    // Map to v = 0 (bottom) to v = 1 (top)
+    const normalizedY = (y + BVE_HEIGHT / 2) / BVE_HEIGHT;  // 0 to 1
+    const v = normalizedY;  // Full texture mapping
+    
+    uvAttr.setXY(i, u, v);
+  }
+  uvAttr.needsUpdate = true;
+  
+  // Basic material (texture loaded later)
+  const cylinderMaterial = new THREE.MeshBasicMaterial({
+    color: 0x87CEEB,  // Sky blue placeholder
     side: THREE.BackSide,
     toneMapped: false
   });
-  skydome = new THREE.Mesh(skydomeGeometry, skydomeBaseMaterial);
-  scene.add(skydome);
   
-  console.log('[Background] ✓ 고정 배경 설정 시작');
+  bveCylinder = new THREE.Mesh(cylinderGeometry, cylinderMaterial);
+  // Position cylinder so horizon is slightly above center
+  // This puts more of the cylinder visible below the horizon
+  bveCylinder.position.y = BVE_HEIGHT * 0.25;  // Shift up so bottom is visible
+  scene.add(bveCylinder);
   
-  // 고정 배경으로 city.jpg 로드
+  // Top cap (samples from top 10% of image)
+  const topCapGeometry = new THREE.CircleGeometry(BVE_RADIUS, BVE_SEGMENTS);
+  topCapGeometry.rotateX(-Math.PI / 2);  // Face down
+  const topCapMaterial = new THREE.MeshBasicMaterial({
+    color: 0x87CEEB,
+    side: THREE.BackSide,
+    toneMapped: false
+  });
+  bveTopCap = new THREE.Mesh(topCapGeometry, topCapMaterial);
+  bveTopCap.position.y = BVE_HEIGHT / 2 + BVE_HEIGHT * 0.25;  // Top of cylinder
+  scene.add(bveTopCap);
+  
+  // Bottom cap (samples from bottom 10% of image)
+  const bottomCapGeometry = new THREE.CircleGeometry(BVE_RADIUS, BVE_SEGMENTS);
+  bottomCapGeometry.rotateX(Math.PI / 2);  // Face up
+  const bottomCapMaterial = new THREE.MeshBasicMaterial({
+    color: 0x333344,  // Darker for ground
+    side: THREE.BackSide,
+    toneMapped: false
+  });
+  bveBottomCap = new THREE.Mesh(bottomCapGeometry, bottomCapMaterial);
+  bveBottomCap.position.y = -BVE_HEIGHT / 2 + BVE_HEIGHT * 0.25;  // Bottom of cylinder
+  scene.add(bveBottomCap);
+  
+  console.log('[BVE Background] ✓ BVE-style cylindrical background initialized');
+  console.log('[BVE Background] Radius:', BVE_RADIUS, 'Height:', BVE_HEIGHT, 'Repetitions:', BVE_REPETITIONS);
+  
+  // Load background texture
   const textureLoaderBg = new THREE.TextureLoader();
   textureLoaderBg.load(
-    '/static/textures/background/sky.jpg',
+    '/static/textures/background/bg.png',
     function(texture) {
-      console.log('[Background] ✓ 텍스처 로드 시작');
+      console.log('[BVE Background] ✓ Texture loaded');
       
-      // Equirectangular 배경 설정
       texture.colorSpace = THREE.SRGBColorSpace;
+      texture.wrapS = THREE.RepeatWrapping;
+      texture.wrapT = THREE.ClampToEdgeWrapping;
       texture.magFilter = THREE.LinearFilter;
       texture.minFilter = THREE.LinearMipMapLinearFilter;
       texture.generateMipmaps = true;
       
-      // 배경으로 설정 (카메라 움직임에 관계없이 고정)
-      scene.background = texture;
+      // Apply to cylinder
+      cylinderMaterial.map = texture;
+      cylinderMaterial.color.set(0xffffff);
+      cylinderMaterial.needsUpdate = true;
       
-      // 스카이돔 메시 비활성화
-      if (skydome) {
-        skydome.visible = false;
+      // Top cap: sample from top 10% of image (v = 0.9 to 1.0)
+      const topCapTex = texture.clone();
+      topCapTex.needsUpdate = true;
+      topCapMaterial.map = topCapTex;
+      topCapMaterial.color.set(0xffffff);
+      topCapMaterial.needsUpdate = true;
+      // Modify top cap UVs to sample top 10%
+      const topUVs = topCapGeometry.attributes.uv;
+      for (let i = 0; i < topUVs.count; i++) {
+        topUVs.setXY(i, 0.5, 0.95);  // Sample center of top 10%
       }
+      topUVs.needsUpdate = true;
       
-      console.log('[Background] ✓ 고정 배경 적용 완료!');
+      // Bottom cap: sample from bottom 10% of image (v = 0 to 0.1)
+      const bottomCapTex = texture.clone();
+      bottomCapTex.needsUpdate = true;
+      bottomCapMaterial.map = bottomCapTex;
+      bottomCapMaterial.color.set(0xffffff);
+      bottomCapMaterial.needsUpdate = true;
+      // Modify bottom cap UVs to sample bottom 10%
+      const bottomUVs = bottomCapGeometry.attributes.uv;
+      for (let i = 0; i < bottomUVs.count; i++) {
+        bottomUVs.setXY(i, 0.5, 0.05);  // Sample center of bottom 10%
+      }
+      bottomUVs.needsUpdate = true;
+      
+      console.log('[BVE Background] ✓ BVE cylindrical background applied!');
     },
     function(progress) {
       if (progress.total > 0) {
         const percent = (progress.loaded / progress.total * 100).toFixed(1);
-        console.log('[Background] 로딩 중... ' + percent + '%');
+        console.log('[BVE Background] Loading... ' + percent + '%');
       }
     },
     function(error) {
-      console.error('[Background] ✗ 배경 로드 실패!');
-      console.error('[Background] 경로: /static/textures/background/nightcity.jpg');
-      console.error('[Background] 에러 상세:', error);
+      console.error('[BVE Background] ✗ Failed to load background texture!');
+      console.error('[BVE Background] Path: /static/textures/background/bg.png');
+      console.error('[BVE Background] Error:', error);
     }
   );
   
+  // Keep reference for legacy code (replaces skydome)
+  let skydome = bveCylinder;
 
   let timeOfDay = "day";
   let daySkyTex, nightSkyTex;
@@ -3085,12 +3188,24 @@ const scene = new THREE.Scene();
   headlight.target = headlightTarget;
   scene.add(camera); // 카메라도 씬에 넣어줘야 자식 라이트가 적용됨
 
-  // ===== 스카이돔을 카메라에 붙이기 (항상 카메라 중심에 위치) =====
-  // skydome이 카메라의 자식이므로 카메라가 어디든 이동해도 항상 보임
-  if (skydome) {
-    skydome.position.set(0, 0, 0);  // 카메라 위치가 0,0,0일 때 skydome도 0,0,0
-    camera.add(skydome);  // skydome을 카메라의 자식으로 설정
-    console.log('[Skydome] ✓ 스카이돔을 카메라에 부착 완료');
+  // ===== BVE 배경을 카메라에 붙이기 (항상 카메라 중심에 위치) =====
+  // 카메라가 이동해도 배경은 항상 카메라 주위를 감싸도록 함
+  if (bveCylinder) {
+    // Remove from scene first (we'll add to camera)
+    scene.remove(bveCylinder);
+    scene.remove(bveTopCap);
+    scene.remove(bveBottomCap);
+    
+    // Reset positions relative to camera (match the initial positions)
+    bveCylinder.position.set(0, BVE_HEIGHT * 0.34, 0);
+    bveTopCap.position.set(0, BVE_HEIGHT / 2 + BVE_HEIGHT * 0.34, 0);
+    bveBottomCap.position.set(0, -BVE_HEIGHT / 2 + BVE_HEIGHT * 0.34, 0);
+    
+    // Add to camera
+    camera.add(bveCylinder);
+    camera.add(bveTopCap);
+    camera.add(bveBottomCap);
+    console.log('[BVE Background] ✓ 배경을 카메라에 부착 완료');
   }
 
   // const renderer = new THREE.WebGLRenderer({ antialias:true, alpha:false });
@@ -3382,7 +3497,7 @@ const groundMat = new THREE.MeshStandardMaterial({
 });
 
 // --- Mesh 생성 (기존과 동일) ---
-const ground = new THREE.Mesh(new THREE.PlaneGeometry(800, 120000, 1, 1), groundMat);
+const ground = new THREE.Mesh(new THREE.PlaneGeometry(800, 120000, 1, 1), groundMat); //800
 ground.rotation.x = -Math.PI / 2;
 ground.position.y = -2.5;
 ground.position.z = 200;
@@ -3630,31 +3745,223 @@ const platH = 1; // 플랫폼 높이 (1.13m로 설정)
 const platW = 3.0; // 플랫폼 폭
 const platZ = 0 + 200; // 세계좌표 보정 (ground/rail과 일치)
 
-// Materials
-const platMatTop = new THREE.MeshStandardMaterial({ color: 0xd8dbe1, roughness: 0.95, metalness: 0.0 });
-const platMatEdge = new THREE.MeshStandardMaterial({ color: 0xf0d060, roughness: 0.6, metalness: 0.0 }); // 노란 라인
+// 플랫폼 바닥 텍스처 로드
+const borderTileTex = textureLoader.load('/static/textures/route/form/border_tile.png', tex => {
+  tex.wrapS = tex.wrapT = THREE.RepeatWrapping;
+  tex.colorSpace = THREE.SRGBColorSpace;
+});
+const dotTileTex = textureLoader.load('/static/textures/route/form/dot_tile.png', tex => {
+  tex.wrapS = tex.wrapT = THREE.RepeatWrapping;
+  tex.colorSpace = THREE.SRGBColorSpace;
+});
+const asphaltTex = textureLoader.load('/static/textures/route/form/asphalt.png', tex => {
+  tex.wrapS = tex.wrapT = THREE.RepeatWrapping;
+  tex.colorSpace = THREE.SRGBColorSpace;
+});
 
-// 좌측 플랫폼 (높이는 그대로 1.13m로 유지)
-const plat = new THREE.Mesh(new THREE.BoxGeometry(platW, platH, platformLen), platMatTop);
-// plat.position.set(+2.4 + 4.9415, platH / 2, platZ - platformLen / 2); // 바닥에서 1.13m로 설정, 높이는 그대로 유지
-// plat.receiveShadow = false; plat.castShadow = false;
-// scene.add(plat);
+// 플랫폼 바닥 재질
+const borderTileMat = new THREE.MeshStandardMaterial({ map: borderTileTex, roughness: 0.9, metalness: 0.0 });
+const dotTileMat = new THREE.MeshStandardMaterial({ map: dotTileTex, roughness: 0.9, metalness: 0.0 });
+const asphaltMat = new THREE.MeshStandardMaterial({ map: asphaltTex, roughness: 0.95, metalness: 0.0 });
 
-// // 좌측 노란 라인
-const platLine = new THREE.Mesh(new THREE.BoxGeometry(0.2, 0.01, platformLen), platMatEdge);
-// platLine.position.set(+1.55 + 4.9415, platH+ 0.01, platZ - platformLen / 2); // 노란 라인 위치도 길이에 맞춰 조정
-// platLine.receiveShadow = false; platLine.castShadow = false; 
-// scene.add(platLine);
+// 각 줄의 폭 (왼쪽에서부터: border 2줄, dot 1줄, asphalt 나머지)
+const tileRowWidth = 0.4;  // 각 타일 줄 폭
+const borderWidth = tileRowWidth * 2;  // border_tile 2줄
+const dotWidth = tileRowWidth * 1;     // dot_tile 1줄
+const asphaltWidth = platW - borderWidth - dotWidth;  // 나머지 asphalt
 
-// 우측 플랫폼 (좌측과 동일한 높이와 Y축 길이 유지)
-const platR = new THREE.Mesh(new THREE.BoxGeometry(platW, platH, platformLen), platMatTop);
-platR.position.set(-2.9415-0.3, platH / 2, platZ - platformLen / 2); // 바닥에서 1.13m로 설정, 좌측과 동일한 높이로 설정
+// 우측 플랫폼 X 기준
+const platBaseX = -2.9415 - 0.3;
+const platRightEdge = platBaseX + platW / 2;  // 플랫폼 오른쪽 가장자리 (선로 쪽)
+
+// 플랫폼 베이스 (보이지 않는 구조용)
+const platMatBase = new THREE.MeshStandardMaterial({ color: 0x555555, roughness: 0.95, metalness: 0.0 });
+
+// 좌측 플랫폼 (사용 안 함)
+const plat = new THREE.Mesh(new THREE.BoxGeometry(platW, platH, platformLen), platMatBase);
+
+// 좌측 노란 라인 (사용 안 함)
+const platLine = new THREE.Mesh(new THREE.BoxGeometry(0.2, 0.01, platformLen), platMatBase);
+
+// 우측 플랫폼 베이스
+const platR = new THREE.Mesh(new THREE.BoxGeometry(platW, platH, platformLen), platMatBase);
+platR.position.set(platBaseX, platH / 2, platZ - platformLen / 2);
 platR.receiveShadow = false; platR.castShadow = false; scene.add(platR);
 
-// 우측 노란 라인
-const platLineR = new THREE.Mesh(new THREE.BoxGeometry(0.2, 0.01, platformLen), platMatEdge);
-platLineR.position.set(-2.0915-0.3, platH +0.01, platZ - platformLen / 2); // 좌측과 동일한 높이로 설정
-platLineR.receiveShadow = false; platLineR.castShadow = false; scene.add(platLineR);
+// UV 반복 계산 함수
+function calcUVRepeat(width, length, tileSize = 1.0) {
+  return { x: width / tileSize, y: length / tileSize };
+}
+
+// 1. Border Tile (2줄) - 플랫폼 가장 오른쪽(선로 쪽)
+const borderGeo = new THREE.PlaneGeometry(borderWidth, platformLen);
+const borderUV = calcUVRepeat(borderWidth, platformLen, 0.4);
+borderTileTex.repeat.set(borderUV.x, borderUV.y);
+const borderMesh = new THREE.Mesh(borderGeo, borderTileMat);
+borderMesh.rotation.x = -Math.PI / 2;
+borderMesh.position.set(platRightEdge - borderWidth / 2, platH + 0.01, platZ - platformLen / 2);
+scene.add(borderMesh);
+
+// 2. Dot Tile (1줄) - border 왼쪽
+const dotGeo = new THREE.PlaneGeometry(dotWidth, platformLen);
+const dotUV = calcUVRepeat(dotWidth, platformLen, 0.4);
+dotTileTex.repeat.set(dotUV.x, dotUV.y);
+const dotMesh = new THREE.Mesh(dotGeo, dotTileMat);
+dotMesh.rotation.x = -Math.PI / 2;
+dotMesh.position.set(platRightEdge - borderWidth - dotWidth / 2, platH + 0.01, platZ - platformLen / 2);
+scene.add(dotMesh);
+
+// 3. Asphalt (나머지) - dot 왼쪽부터 끝까지
+const asphaltGeo = new THREE.PlaneGeometry(asphaltWidth, platformLen);
+const asphaltUV = calcUVRepeat(asphaltWidth, platformLen, 1.0);
+asphaltTex.repeat.set(asphaltUV.x, asphaltUV.y);
+const asphaltMesh = new THREE.Mesh(asphaltGeo, asphaltMat);
+asphaltMesh.rotation.x = -Math.PI / 2;
+asphaltMesh.position.set(platRightEdge - borderWidth - dotWidth - asphaltWidth / 2, platH + 0.01, platZ - platformLen / 2);
+scene.add(asphaltMesh);
+
+// 플랫폼 바닥 업데이트 함수 (길이 변경시)
+window.__updatePlatformFloor = function(newLen) {
+  // Border
+  if (borderMesh.geometry) borderMesh.geometry.dispose();
+  borderMesh.geometry = new THREE.PlaneGeometry(borderWidth, newLen);
+  borderMesh.position.z = platZ - newLen / 2;
+  borderTileTex.repeat.set(borderUV.x, newLen / 0.4);
+  
+  // Dot
+  if (dotMesh.geometry) dotMesh.geometry.dispose();
+  dotMesh.geometry = new THREE.PlaneGeometry(dotWidth, newLen);
+  dotMesh.position.z = platZ - newLen / 2;
+  dotTileTex.repeat.set(dotUV.x, newLen / 0.4);
+  
+  // Asphalt
+  if (asphaltMesh.geometry) asphaltMesh.geometry.dispose();
+  asphaltMesh.geometry = new THREE.PlaneGeometry(asphaltWidth, newLen);
+  asphaltMesh.position.z = platZ - newLen / 2;
+  asphaltTex.repeat.set(asphaltUV.x, newLen / 1.0);
+};
+
+// 노란 라인 제거 (더 이상 사용 안 함)
+const platLineR = { geometry: { dispose: () => {} }, position: { set: () => {} } };  // 더미 객체
+
+// --- 플랫폼 양끝 펜스 (Fence) ---
+const fenceTexture = textureLoader.load('/static/textures/kt/Fence5.png', function(tex) {
+  tex.colorSpace = THREE.SRGBColorSpace;
+});
+const fenceMaterial = new THREE.MeshBasicMaterial({
+  map: fenceTexture,
+  side: THREE.DoubleSide,
+  transparent: true,
+  alphaTest: 0.5
+});
+
+const fenceWidth = platW;   // 펜스 폭 = 플랫폼 폭과 동일
+const fenceHeight = 1.2;    // 펜스 높이
+const platCenterX = -2.9415 - 0.3;  // 우측 플랫폼 기준 X 위치
+
+// 앞쪽 펜스 1개 (플랫폼 앞끝)
+const fenceFrontGeo = new THREE.PlaneGeometry(fenceWidth, fenceHeight);
+const fenceFront = new THREE.Mesh(fenceFrontGeo, fenceMaterial);
+fenceFront.position.set(
+  platCenterX,
+  platH + fenceHeight / 2,
+  platZ  // 플랫폼 앞끝 = platZ (정차벽 위치)
+);
+fenceFront.rotation.y = Math.PI;
+scene.add(fenceFront);
+
+// 뒤쪽 펜스 1개 (플랫폼 뒤끝)
+const fenceBackGeo = new THREE.PlaneGeometry(fenceWidth, fenceHeight);
+const fenceBack = new THREE.Mesh(fenceBackGeo, fenceMaterial);
+fenceBack.position.set(
+  platCenterX,
+  platH + fenceHeight / 2,
+  platZ - platformLen  // 플랫폼 뒤끝
+);
+scene.add(fenceBack);
+
+// --- 플랫폼 뒷면 연속 펜스 (Back side continuous fence) ---
+// 뒷면은 Fence3.png 사용 (양끝과 다른 텍스처)
+const backFenceTexture = textureLoader.load('/static/textures/background/Fence3.png', function(tex) {
+  tex.colorSpace = THREE.SRGBColorSpace;
+});
+const backFenceMaterial = new THREE.MeshBasicMaterial({
+  map: backFenceTexture,
+  side: THREE.DoubleSide,
+  transparent: true,
+  alphaTest: 0.5
+});
+
+const backFenceGroup = new THREE.Group();
+scene.add(backFenceGroup);
+
+function buildBackFences(len) {
+  // 기존 펜스 제거 (그룹의 모든 자식 제거)
+  while (backFenceGroup.children.length > 0) {
+    const child = backFenceGroup.children[0];
+    if (child.geometry) child.geometry.dispose();
+    backFenceGroup.remove(child);
+  }
+  
+  // 펜스 배치 (플랫폼 뒷면 전체 길이, 딱 맞아떨어지게)
+  const fenceSectionWidth = platW * 2;  // 양끝 펜스의 2배 폭 (6.0m)
+  const backX = platCenterX - platW / 2 - 0.05;  // 플랫폼 뒷면 (선로 반대쪽)
+  
+  // 펜스 개수를 하나 적게 계산하고, 남은 공간은 축소된 텍스처로 메꿈
+  const numFullFences = Math.floor(len / fenceSectionWidth) - 1;  // 하나 적게
+  if (numFullFences < 0) return;  // 길이가 너무 짧으면 스킵
+  
+  const usedLength = numFullFences * fenceSectionWidth;
+  const remainderWidth = len - usedLength;  // 남은 공간 (6m ~ 12m 사이)
+  
+  // 정규 펜스 배치 (Fence3.png 사용) - backFenceGroup에만 추가
+  let currentZ = platZ;
+  
+  for (let i = 0; i < numFullFences; i++) {
+    const fenceGeo = new THREE.PlaneGeometry(fenceSectionWidth, fenceHeight);
+    const fence = new THREE.Mesh(fenceGeo, backFenceMaterial);
+    const z = currentZ - fenceSectionWidth / 2;
+    fence.position.set(backX, platH + fenceHeight / 2, z);
+    fence.rotation.y = Math.PI / 2;
+    backFenceGroup.add(fence);  // 그룹에만 추가 (그룹이 scene에 있음)
+    currentZ -= fenceSectionWidth;
+  }
+  
+  // 남은 공간을 축소된 텍스처로 메꿈
+  if (remainderWidth > 0.01) {
+    // UV 스케일 조정 - 텍스처 width를 remainderWidth / fenceSectionWidth 비율로 축소
+    const uvScale = remainderWidth / fenceSectionWidth;
+    const lastFenceGeo = new THREE.PlaneGeometry(remainderWidth, fenceHeight);
+    // UV 좌표 수정 (텍스처의 일부만 사용)
+    const uvAttr = lastFenceGeo.attributes.uv;
+    for (let i = 0; i < uvAttr.count; i++) {
+      const u = uvAttr.getX(i);
+      uvAttr.setX(i, u * uvScale);  // U 좌표를 축소
+    }
+    uvAttr.needsUpdate = true;
+    
+    const lastFence = new THREE.Mesh(lastFenceGeo, backFenceMaterial);
+    const z = currentZ - remainderWidth / 2;
+    lastFence.position.set(backX, platH + fenceHeight / 2, z);
+    lastFence.rotation.y = Math.PI / 2;
+    backFenceGroup.add(lastFence);  // 그룹에만 추가
+  }
+  
+  console.log(`[BackFence] len=${len}, fullFences=${numFullFences}, remainder=${remainderWidth.toFixed(2)}`);
+}
+
+// 초기 펜스 생성
+buildBackFences(platformLen);
+
+// 펜스 위치 업데이트 함수 (플랫폼 길이 변경시 호출)
+window.__updateFencePositions = function(newLen) {
+  fenceFront.position.z = platZ;  // 앞끝은 항상 platZ
+  fenceBack.position.z = platZ - newLen;  // 뒤끝은 platZ - 길이
+  buildBackFences(newLen);  // 뒷면 펜스 재생성
+};
+
+console.log('[Platform] ✓ 플랫폼 양끝에 펜스 2개 배치 완료');
+
 // --- 스크린도어 (PSD) 설정 ---
 let psdGroup = new THREE.Group();
 scene.add(psdGroup);
@@ -3775,24 +4082,48 @@ window.__updatePlatformLength = function(newLen) {
     if (window.__rebuildPSD) {
         window.__rebuildPSD(newLen);
     }
+    
+    // 펜스 위치 업데이트
+    if (window.__updateFencePositions) {
+        window.__updateFencePositions(newLen);
+    }
+    
+    // 플랫폼 바닥 타일 업데이트
+    if (window.__updatePlatformFloor) {
+        window.__updatePlatformFloor(newLen);
+    }
 
   } catch(e) { console.error(e); }
 };
   // --- 플랫폼 기둥 및 지붕 추가 (간단한 구조로 분위기 향상) ---
 (function initPlatformRoof(){
 
-  // 재질/기하 한 번만 만들어서 재사용
-  const pillarMat = new THREE.MeshStandardMaterial({
-    color: 0xdddddd,
-    metalness: 0.2,
-    roughness: 0.6
+  // 텍스처 로드
+  const roofTex = textureLoader.load('/static/textures/route/form/roof.png', tex => {
+    tex.wrapS = tex.wrapT = THREE.RepeatWrapping;
+    tex.colorSpace = THREE.SRGBColorSpace;
+  });
+  const roofPoleTex = textureLoader.load('/static/textures/route/form/roof_pole.png', tex => {
+    tex.wrapS = tex.wrapT = THREE.ClampToEdgeWrapping;  // 반복 없이 한 면에 꽉 채움
+    tex.colorSpace = THREE.SRGBColorSpace;
+  });
+  const ledLightTex = textureLoader.load('/static/textures/route/form/light.png', tex => {
+    tex.wrapS = THREE.RepeatWrapping;  // 길이 방향으로 반복
+    tex.wrapT = THREE.ClampToEdgeWrapping;
+    tex.colorSpace = THREE.SRGBColorSpace;
+  });
+
+  // 재질 (텍스처 적용)
+  const pillarMat = new THREE.MeshBasicMaterial({
+    map: roofPoleTex  // MeshBasicMaterial은 조명 영향 없이 항상 보임
   });
   const roofMat = new THREE.MeshStandardMaterial({
-    color: 0xf1f3f6,
+    map: roofTex,
     metalness: 0.05,
     roughness: 0.8
   });
   const pillarGeo = new THREE.BoxGeometry(0.3, 3.5, 0.3);
+  // 기둥은 텍스처 반복 없이 한 면당 하나씩
 
   function buildPlatformRoofAndLights(len) {
     // 1) 이전 기둥 제거
@@ -3812,6 +4143,11 @@ window.__updatePlatformLength = function(newLen) {
       if (platformRoof.geometry) platformRoof.geometry.dispose();
       platformRoof = null;
     }
+
+    // 지붕 텍스처 반복 설정 (1m 텍스처 기준)
+    const roofWidth = platW * 1.5;
+    const roofLen = len + 6;
+    roofTex.repeat.set(roofWidth / 1.0, roofLen / 1.0);
 
     // 새 시작/끝 z는 플랫폼 길이(len)에 맞춰
     const startZ = platZ - 2;
@@ -3836,7 +4172,7 @@ window.__updatePlatformLength = function(newLen) {
       const lampRange = 22;
       const lampColor = 0xfff1c4;
 
-      const lampL = new THREE.PointLight(lampColor, 0, lampRange, 2.0);
+      const lampL = new THREE.PointLight(lampColor, 1.5, lampRange, 2.0);  // 강도 1.5로 증가
       lampL.position.set(-2.2, lampHeight, z);
       lampL.castShadow = false;
       scene.add(lampL);
@@ -3844,13 +4180,45 @@ window.__updatePlatformLength = function(newLen) {
     }
 
     // 지붕도 len 기준으로 다시 생성
-    const roofGeo = new THREE.BoxGeometry(platW * 1.5, 0.12, len + 6);
+    const roofGeo = new THREE.BoxGeometry(roofWidth, 0.12, roofLen);
     platformRoof = new THREE.Mesh(roofGeo, roofMat);
     platformRoof.position.set(-2.25, platH + 3.0, platZ - len / 2);
     platformRoof.rotation.z = THREE.MathUtils.degToRad(5);
     platformRoof.castShadow = false;
     platformRoof.receiveShadow = false;
     scene.add(platformRoof);
+    
+    // 🌟 지붕 아래 전체 조명 (텍스처가 자연스럽게 보이도록)
+    const roofAmbientLight = new THREE.RectAreaLight(0xffffff, 0.8, roofWidth, roofLen);
+    roofAmbientLight.position.set(-2.25, platH + 2.9, platZ - len / 2);
+    roofAmbientLight.rotation.x = Math.PI / 2;  // 아래를 향하도록
+    scene.add(roofAmbientLight);
+    platformLights.push(roofAmbientLight);
+    
+    // 💡 LED 조명 스트립 (천장 중앙보다 선로 쪽으로)
+    const ledWidth = 0.15;  // LED 스트립 폭
+    const ledLen = roofLen - 2;  // 지붕보다 조금 짧게
+    ledLightTex.repeat.set(1, ledLen / 1.0);  // 1m 텍스처 기준 반복
+    
+    const ledMat = new THREE.MeshBasicMaterial({
+      map: ledLightTex,
+      side: THREE.DoubleSide,
+      transparent: true
+    });
+    const ledGeo = new THREE.PlaneGeometry(ledWidth, ledLen);
+    const ledStrip = new THREE.Mesh(ledGeo, ledMat);
+    ledStrip.rotation.x = -Math.PI / 2;  // 수평으로 눅혀서 아래를 보게
+    // 천장 중앙(-2.25)보다 선로 쪽(오른쪽)으로 이동
+    ledStrip.position.set(-1.5, platH + 2.99, platZ - len / 2);
+    scene.add(ledStrip);
+    platformLights.push(ledStrip);  // 나중에 제거할 수 있도록
+    
+    // LED에서 빛 나오게 (선형 조명)
+    const ledLight = new THREE.RectAreaLight(0xffffff, 2.5, ledWidth, ledLen);
+    ledLight.position.set(-1.5, platH + 2.95, platZ - len / 2);
+    ledLight.rotation.x = Math.PI / 2;  // 아래를 향하도록
+    scene.add(ledLight);
+    platformLights.push(ledLight);
   }
   // 초기 한 번: 현재 platformLen 기준으로 생성
   buildPlatformRoofAndLights(platformLen);
