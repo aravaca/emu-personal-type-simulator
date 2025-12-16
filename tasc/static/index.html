@@ -4370,10 +4370,10 @@ class BveSoundEngine {
     this.runRefSpeed = 90;     // km/h - reference speed for Run.wav recording
     this.lastFlangeTime = 0;   // Last time flange was played
     this.lastRunTime = 0;      // Last time run was played
-    this.flangeMinInterval = 3;  // Minimum seconds between flange sounds
-    this.runMinInterval = 2;     // Minimum seconds between run sounds
-    this.flangeChance = 0.15;    // Probability per update to play flange
-    this.runChance = 0.2;        // Probability per update to play run
+    this.flangeMinInterval = 5;  // Minimum seconds between flange sounds
+    this.runMinInterval = 4;     // Minimum seconds between run sounds
+    this.flangeChance = 0.06;    // Probability per update to play flange
+    this.runChance = 0.08;       // Probability per update to play run
   }
 
   /**
@@ -4894,6 +4894,10 @@ class BveSoundEngine {
    */
   updateRailSounds(speedKmh, remainingM = Infinity) {
     const now = this.ctx.currentTime;
+
+    // 🚄 N700S나 KTX 열차에서는 flange/run 사운드 재생 안함 (고속열차 레일은 용접됨)
+    const layoutKey = window.__currentCabLayoutKey || '';
+    if (layoutKey === 'n700s' || layoutKey === 'ktx') return;
 
     // Only play when speed >= 30 km/h and remaining distance > 500m
     if (speedKmh < 45) return;
