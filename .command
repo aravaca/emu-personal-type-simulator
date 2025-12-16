@@ -1,5 +1,5 @@
 git add .
-git commit -m "update graphics"
+git commit -m "add sound for N"
 git push origin main
 
 pip install fastapi uvicorn[standard]

@@ -4362,6 +4362,18 @@ class BveSoundEngine {
     this.doorCloseBuffer = null;
     this.doorPlaying = false;
     this.lastDoorTrigger = -10; // Last time door was played (in seconds)
+    
+    // 🚃 Flange & Run sound state (rail sounds)
+    this.flangeBuffer = null;
+    this.runBuffer = null;
+    this.flangeRefSpeed = 45;  // km/h - reference speed for Flange.wav recording
+    this.runRefSpeed = 90;     // km/h - reference speed for Run.wav recording
+    this.lastFlangeTime = 0;   // Last time flange was played
+    this.lastRunTime = 0;      // Last time run was played
+    this.flangeMinInterval = 3;  // Minimum seconds between flange sounds
+    this.runMinInterval = 2;     // Minimum seconds between run sounds
+    this.flangeChance = 0.15;    // Probability per update to play flange
+    this.runChance = 0.2;        // Probability per update to play run
   }
 
   /**
@@ -4738,6 +4750,179 @@ class BveSoundEngine {
   }
 
   /**
+   * Load flange sound (rail screech on curves)
+   */
+  async loadFlangeSound(flangePath) {
+    try {
+      const response = await fetch(flangePath);
+      const arrayBuffer = await response.arrayBuffer();
+      this.flangeBuffer = await new Promise((resolve, reject) => {
+        try {
+          this.ctx.decodeAudioData(arrayBuffer, (buf) => resolve(buf), (err) => reject(err));
+        } catch (err) { reject(err); }
+      });
+      console.log("✓ BVE loaded flange sound");
+    } catch (err) {
+      console.warn("Failed to load flange sound:", err);
+    }
+  }
+
+  /**
+   * Load run sound (rail joint clicks)
+   */
+  async loadRunSound(runPath) {
+    try {
+      const response = await fetch(runPath);
+      const arrayBuffer = await response.arrayBuffer();
+      this.runBuffer = await new Promise((resolve, reject) => {
+        try {
+          this.ctx.decodeAudioData(arrayBuffer, (buf) => resolve(buf), (err) => reject(err));
+        } catch (err) { reject(err); }
+      });
+      console.log("✓ BVE loaded run sound");
+    } catch (err) {
+      console.warn("Failed to load run sound:", err);
+    }
+  }
+
+  /**
+   * Play flange sound at proper pitch based on speed
+   * @param {number} speedKmh - Current speed in km/h
+   */
+  playFlangeSound(speedKmh) {
+    if (!this.flangeBuffer) return;
+    if (speedKmh < 10) return; // Don't play at very low speeds
+
+    const doPlay = () => {
+      try {
+        const source = this.ctx.createBufferSource();
+        source.buffer = this.flangeBuffer;
+        source.loop = false;
+
+        // Calculate playback rate based on speed ratio
+        // Reference speed is 45 km/h
+        const playbackRate = Math.max(0.5, Math.min(2.0, speedKmh / this.flangeRefSpeed));
+        source.playbackRate.value = playbackRate;
+
+        const gain = this.ctx.createGain();
+        // Volume scales with speed (reduced volume + fade in/out)
+        const maxVol = Math.min(0.15, 0.05 + (speedKmh / 200) * 0.1);
+        const duration = this.flangeBuffer.duration / playbackRate;
+        const fadeTime = Math.min(0.3, duration * 0.25); // 25% of duration or 0.3s max
+        
+        // Fade in
+        gain.gain.setValueAtTime(0, this.ctx.currentTime);
+        gain.gain.linearRampToValueAtTime(maxVol, this.ctx.currentTime + fadeTime);
+        // Fade out
+        gain.gain.setValueAtTime(maxVol, this.ctx.currentTime + duration - fadeTime);
+        gain.gain.linearRampToValueAtTime(0, this.ctx.currentTime + duration);
+
+        source.connect(gain);
+        gain.connect(this.master);
+        source.start(this.ctx.currentTime);
+
+        console.debug(`BVE: Flange played at ${speedKmh.toFixed(0)} km/h, rate=${playbackRate.toFixed(2)}`);
+      } catch (err) {
+        console.error("BVE: Error playing flange:", err);
+      }
+    };
+
+    if (this.ctx.state === 'suspended') {
+      this.ctx.resume().then(doPlay).catch(err => console.error('BVE: resume failed', err));
+    } else {
+      doPlay();
+    }
+  }
+
+  /**
+   * Play run sound (rail joint) at proper pitch based on speed
+   * @param {number} speedKmh - Current speed in km/h
+   */
+  playRunSound(speedKmh) {
+    if (!this.runBuffer) return;
+    if (speedKmh < 5) return; // Don't play when nearly stopped
+
+    const doPlay = () => {
+      try {
+        const source = this.ctx.createBufferSource();
+        source.buffer = this.runBuffer;
+        source.loop = false;
+
+        // Calculate playback rate based on speed ratio
+        // Reference speed is 90 km/h
+        const playbackRate = Math.max(0.3, Math.min(2.5, speedKmh / this.runRefSpeed));
+        source.playbackRate.value = playbackRate;
+
+        const gain = this.ctx.createGain();
+        // Volume scales with speed (reduced volume + fade in/out)
+        const maxVol = Math.max(0.4, 0.08 + (speedKmh / 150) * 0.12);
+        const duration = this.runBuffer.duration / playbackRate;
+        const fadeTime = Math.max(0.45, duration * 0.2); // 20% of duration or 0.25s max
+        
+        // Fade in
+        gain.gain.setValueAtTime(0, this.ctx.currentTime);
+        gain.gain.linearRampToValueAtTime(maxVol, this.ctx.currentTime + fadeTime);
+        // Fade out
+        gain.gain.setValueAtTime(maxVol, this.ctx.currentTime + duration - fadeTime);
+        gain.gain.linearRampToValueAtTime(0, this.ctx.currentTime + duration);
+
+        source.connect(gain);
+        gain.connect(this.master);
+        source.start(this.ctx.currentTime);
+
+        console.debug(`BVE: Run played at ${speedKmh.toFixed(0)} km/h, rate=${playbackRate.toFixed(2)}`);
+      } catch (err) {
+        console.error("BVE: Error playing run:", err);
+      }
+    };
+
+    if (this.ctx.state === 'suspended') {
+      this.ctx.resume().then(doPlay).catch(err => console.error('BVE: resume failed', err));
+    } else {
+      doPlay();
+    }
+  }
+
+  /**
+   * Randomly trigger flange/run sounds based on speed (call every frame)
+   * @param {number} speedKmh - Current speed in km/h
+   */
+  /**
+   * Randomly trigger flange/run sounds based on speed (call every frame)
+   * @param {number} speedKmh - Current speed in km/h
+   * @param {number} remainingM - Remaining distance in meters (optional)
+   */
+  updateRailSounds(speedKmh, remainingM = Infinity) {
+    const now = this.ctx.currentTime;
+
+    // Only play when speed >= 30 km/h and remaining distance > 500m
+    if (speedKmh < 45) return;
+    if (remainingM <= 1000) return;
+
+    // Flange sound - random chance, more likely at higher speeds
+    if (now - this.lastFlangeTime > this.flangeMinInterval) {
+      const flangeProb = this.flangeChance * Math.min(1, speedKmh / 60);
+      if (Math.random() < flangeProb * 0.016) { // ~1 check per frame at 60fps
+        this.playFlangeSound(speedKmh);
+        this.lastFlangeTime = now;
+      }
+    }
+
+    // Run sound (rail joints) - more frequent
+    if (now - this.lastRunTime > this.runMinInterval) {
+      // Interval decreases with speed (faster = more frequent rail joints)
+      const dynamicInterval = Math.max(0.5, this.runMinInterval - (speedKmh / 100));
+      if (now - this.lastRunTime > dynamicInterval) {
+        const runProb = this.runChance * Math.min(1.2, speedKmh / 50);
+        if (Math.random() < runProb * 0.016) {
+          this.playRunSound(speedKmh);
+          this.lastRunTime = now;
+        }
+      }
+    }
+  }
+
+  /**
    * Get interpolated volume for a WAV at a given speed using the appropriate table.
    */
   getInterpolatedVol(speed, wavName, mode) {
@@ -4928,7 +5113,7 @@ class BveSoundEngine {
     // 🔊 N 노치 (neutral)일 때 마스터 볼륨 80% 감소
     const isNeutral = (powerNotch === 0 && brakeNotch === 0 && !isEB);
     const newTargetVol = isNeutral 
-      ? this.baseMasterVolume * 0.3  // 80% 감소 = 20% 볼륨
+      ? this.baseMasterVolume * 0.6  // 80% 감소 = 20% 볼륨
       : this.baseMasterVolume;       // 원래 볼륨
     
     if (this.targetMasterVolume !== newTargetVol) {
@@ -5097,6 +5282,10 @@ async function initializeBveEngine(trainType = '') {
         ? "/static/E233/ExternalData/Sound/Horn/HornD.wav"
         : "/static/E233/ExternalData/Sound/Horn/HornB.wav";
       await bveSoundEngine.loadHornSound(hornPath);
+
+      // 🚃 Load flange and run sounds (rail sounds)
+      await bveSoundEngine.loadFlangeSound("/static/E233/OriginalData/Sound/Run/Flange1.wav");
+      await bveSoundEngine.loadRunSound("/static/E233/OriginalData/Sound/Run/Run_SlabShort.wav");
 
       // Load air-down sounds used for brake transitions
       await loadAirSounds();
@@ -6682,6 +6871,10 @@ ws.onmessage = (ev) => {
       const isEB = (rawNotch === maxBrakeIdx);
 
       bveSoundEngine.update(speedKmh, powerNotch, maxPowerNotch, brakeNotch, maxBrakeIdx, isEB);
+      
+      // 🚃 Play random rail sounds (flange & run) based on speed and remaining distance
+      const remainingM = (typeof st.remaining_m === 'number') ? st.remaining_m : Infinity;
+      bveSoundEngine.updateRailSounds(speedKmh, remainingM);
 
       // Play door sound when train arrives (prefer st.finished or speed==0 and remaining distance ≤ 1m)
       try {
