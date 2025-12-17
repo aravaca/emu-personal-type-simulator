@@ -1,5 +1,5 @@
 git add .
-git commit -m "add acceleration smoothing for power-on sequence"
+git commit -m "minihud update"
 git push origin main
 
 pip install fastapi uvicorn[standard]

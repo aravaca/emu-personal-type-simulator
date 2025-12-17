@@ -1559,7 +1559,7 @@ function getAtcMaxSpeed(remaining_m) {
         <span class="mini-label"></span>
         <span class="mini-value" id="miniClock">--:--:--</span>
       </div>
-      <div class="mini-row timer">
+      <div class="mini-row timer" id="miniTimerRow">
         <span class="mini-label">To Next Sta.</span>
         <span class="mini-value" id="miniTimer">
           <span class="min">00</span>
@@ -1567,7 +1567,7 @@ function getAtcMaxSpeed(remaining_m) {
         </span>
       </div>
 
-      <div class="mini-row">
+      <div class="mini-row" id="miniNextRow">
         <span class="mini-label">Next</span>
         <span class="mini-value" id="miniNext">—</span>
       </div>
@@ -7352,7 +7352,7 @@ function playNotchSoundHelper() {
       const source = bveCtx.createBufferSource();
       source.buffer = buffer;
       const gain = bveCtx.createGain();
-      gain.gain.value = 0.5; // 0~1 범위의 볼륨(조정 가능)
+      gain.gain.value = 0.1; // 0~1 범위의 볼륨(조정 가능)
       source.connect(gain);
       gain.connect(bveCtx.destination);
       source.start();
@@ -7624,6 +7624,16 @@ if (miniRemain) {
   miniRemain.style.color = remEl.style.color;
 }
 
+// 🔹 mini HUD – rndToggle에 따라 Next/Timer row 표시/숨김
+try {
+  const rndEl = document.getElementById('rndToggle');
+  const isRndOn = rndEl && rndEl.checked;
+  const miniTimerRow = document.getElementById('miniTimerRow');
+  const miniNextRow = document.getElementById('miniNextRow');
+  if (miniTimerRow) miniTimerRow.style.display = isRndOn ? '' : 'none';
+  if (miniNextRow) miniNextRow.style.display = isRndOn ? '' : 'none';
+} catch(e) {}
+
 spdEl.textContent = (st.v * 3.6).toFixed(1);
 
 // 🔹 mini HUD – 속도
@@ -7817,13 +7827,19 @@ if (miniNotch) {
 
 // 🔹 mini HUD – 기어
 if (miniGear) {
-  miniGear.textContent = st.gear || "F";
+  const prevGear = miniGear.textContent;
+  const newGear = st.gear || "F";
+  miniGear.textContent = newGear;
   if (st.gear === "R") {
     miniGear.style.color = "#ff5757";  // 빨강
   } else if (st.gear === "N") {
     miniGear.style.color = "#f1c40f";  // 노랑
   } else {
     miniGear.style.color = "#2ecc71";  // 초록 (F)
+  }
+  // 기어 변경 시 노치 사운드 재생
+  if (prevGear && prevGear !== newGear) {
+    try { playNotchSound(); } catch(e) {}
   }
 }
 
