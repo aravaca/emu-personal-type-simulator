@@ -1151,7 +1151,7 @@ body {
 }
 
 #cabCard > #cab3d {
-  width: 95% !important;  /* Use full width of the parent */
+  width: 98% !important;  /* Use full width of the parent */
   margin: 0 !important;
   padding: 0 !important;
   aspect-ratio: 16/9 !important;
@@ -4192,7 +4192,7 @@ const aiTrainSystem = (() => {
     const distToLeading = leadingEdge - camZ;   // 양수: 아직 안 왔음
     const distToTrailing = trailingEdge - camZ; // 음수가 되면 완전히 지나감
     
-    const maxDistApproach = 200;  // 다가올 때 들리는 거리
+    const maxDistApproach = 300;  // 다가올 때 들리는 거리
     const maxDistLeave = 100;     // 멀어질 때 들리는 거리
     
     // 볼륨 계산
@@ -4671,7 +4671,7 @@ const psdMat = new THREE.MeshBasicMaterial({
 const apdMat = new THREE.MeshBasicMaterial({
     map: apdTexture,
     // side: THREE.DoubleSide,
-    transparent: false, // 투명도 활성화
+    transparent: true, // 투명도 활성화
     alphaTest: 0.5     // 알파값 0.5 미만은 완전 투명
 });
 
