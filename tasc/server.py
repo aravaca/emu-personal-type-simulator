@@ -81,7 +81,7 @@ class Vehicle:
         
         # 1. [핵심] 차량 타입에 따른 물리 상수 설정 (분기 처리)
         if self.type == "고속":
-            current_Cd = 0.22 # 0.15~0.30 권장 시작점
+            current_Cd = 0.15 # 0.15~0.30 권장 시작점
             current_A = 10.5 # 9~12 m^2 정도에서 튜닝
             tech_efficiency = 0.85
         else:
@@ -524,8 +524,8 @@ class StoppingSim:
         # 🚃 Low-speed brake fade: linearly reduce from 100% at 5 km/h to 10% at 0 km/h
         v_kmh = v * 3.6
         if v_kmh < 5.0:
-            # Linear interpolation: 70% at 0 km/h, 100% at 5 km/h
-            low_speed_factor = 0.7 + 0.3 * (v_kmh / 5.0)
+            # Linear interpolation: 50% at 0 km/h, 100% at 5 km/h
+            low_speed_factor = 0.5 + 0.5 * (v_kmh / 5.0)
             a_eff *= low_speed_factor
         
         return a_eff
@@ -841,11 +841,11 @@ class StoppingSim:
                 6:  (1.00,  95, 210, 220),
                 7:  (1.00, 115, 240, 250),
                 8:  (1.00, 135, 265, 270),
-                9:  (1.00, 145, 280, 285),
-                10: (1.00, 155, 295, 300),
-                11: (1.00, 165, 310, 315),
-                12: (1.00, 175, 320, 335),
-                13: (1.00, 185, 330, 365)
+                9:  (1.00, 150, 280, 285),
+                10: (1.00, 165, 295, 300),
+                11: (1.00, 180, 320, 325),
+                12: (1.00, 190, 345, 350),
+                13: (1.00, 200, 362, 365)
             }
 
             current_notch = abs(lever_notch)

@@ -1,18 +1,18 @@
 {
   "name": "JR WEST N700S-3000",
   "type": "고속",
-  "mass_t": 43.75,
+  "mass_t": 38.65,
   "a_max": 0.722,
   "j_max": 0.4,
 
   "notches": 9,
   "notch_accels": [-1.011, -0.750, -0.705, -0.632, -0.542, -0.438, -0.324, -0.200, 0.000 ],
 
-  "maxSpeed_kmh": 360,
+  "maxSpeed_kmh": 370,
 
   "forward_notches": 13,
   "forward_notch_accels": [ 1,1,1,1,1,1,1,1,1,1,1,1,1 ],
-  "T_max_kN": 506.0,
+  "T_max_kN": 580.0,
   "P_max_kW": 17080.0,
 
   "tau_cmd_ms": 180,
