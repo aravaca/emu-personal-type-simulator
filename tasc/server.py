@@ -879,7 +879,15 @@ class StoppingSim:
             # [Tuning] 잔류 동력 비율 (0.0 ~ 1.0)
             # 고속일수록 공기저항이 세므로, 계산된 힘의 10~15% 정도는 남겨야 속도가 유지됨
             # Notch가 낮을수록(저속) 비율을 낮추고, 높을수록 높이는 동적 할당도 가능
-            residual_ratio = 0.20  
+            if lever_notch >= -2:
+                residual_ratio = 0.10
+            elif lever_notch >= -4:
+                residual_ratio = 0.25
+            elif lever_notch >= -6:
+                residual_ratio = 0.40
+            else:
+                residual_ratio = 0.50  
+                
 
             if v_kmh >= v_cut_kmh:
                 # [Cruising 구간]
