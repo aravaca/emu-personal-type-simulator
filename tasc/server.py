@@ -85,7 +85,7 @@ class Vehicle:
             current_A = 10.5 # 9~12 m^2 정도에서 튜닝
             tech_efficiency = 0.85
         else:
-            current_Cd = 1.4 # 0.8~1.4
+            current_Cd = 7.0 # 0.8~1.4
             current_A = 9.5
             tech_efficiency = 1.0
 
